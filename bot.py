@@ -1,23 +1,27 @@
 import os
 import logging
 import threading
+import time
 from dotenv import load_dotenv
 from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
+# Загрузка переменных окружения
 load_dotenv()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHANNEL_ID = int(os.getenv('CHANNEL_ID', '-1001805328200'))
 PAUSE_MODE = os.getenv('PAUSE_MODE', 'false').lower() == 'true'
 
+# Логирование
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
+# Проверка токена
 if not BOT_TOKEN or len(BOT_TOKEN) < 30:
     print("❌ ОШИБКА: BOT_TOKEN не найден!")
     exit(1)
@@ -25,7 +29,7 @@ if not BOT_TOKEN or len(BOT_TOKEN) < 30:
 print(f"✅ Токен загружен: {len(BOT_TOKEN)} символов")
 print(f"📢 Канал: {CHANNEL_ID}")
 
-# Flask для UptimeRobot пингов
+# Flask для UptimeRobot
 app = Flask(__name__)
 
 @app.route('/')
@@ -38,7 +42,7 @@ def health_check():
     }
 
 def run_flask():
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 5000))  # Render задаёт PORT
     app.run(host='0.0.0.0', port=port, debug=False)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -56,13 +60,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def pause_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global PAUSE_MODE
     PAUSE_MODE = True
-    logger.info("⏸️ ПАУЗА!")
+    logger.info("⏸️ ПАУЗА ВКЛЮЧЕНА!")
     await update.message.reply_text("⏸️ **ПАУЗА!** Удаление остановлено.")
 
 async def resume_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global PAUSE_MODE
     PAUSE_MODE = False
-    logger.info("▶️ АКТИВЕН!")
+    logger.info("▶️ БОТ АКТИВЕН!")
     await update.message.reply_text("▶️ **АКТИВЕН!** Удаляет НЕ-фото.")
 
 async def status_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
