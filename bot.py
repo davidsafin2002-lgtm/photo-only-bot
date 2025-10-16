@@ -1,6 +1,8 @@
 import os
 import logging
+import threading
 from dotenv import load_dotenv
+from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
@@ -23,6 +25,22 @@ if not BOT_TOKEN or len(BOT_TOKEN) < 30:
 print(f"✅ Токен загружен: {len(BOT_TOKEN)} символов")
 print(f"📢 Канал: {CHANNEL_ID}")
 
+# Flask для UptimeRobot пингов
+app = Flask(__name__)
+
+@app.route('/')
+def health_check():
+    return {
+        "status": "ok",
+        "bot": "running",
+        "pause": PAUSE_MODE,
+        "timestamp": time.time()
+    }
+
+def run_flask():
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
     await update.message.reply_text(
@@ -38,13 +56,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def pause_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global PAUSE_MODE
     PAUSE_MODE = True
-    logger.info("⏸️ ПАУЗА ВКЛЮЧЕНА!")
+    logger.info("⏸️ ПАУЗА!")
     await update.message.reply_text("⏸️ **ПАУЗА!** Удаление остановлено.")
 
 async def resume_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global PAUSE_MODE
     PAUSE_MODE = False
-    logger.info("▶️ БОТ АКТИВЕН!")
+    logger.info("▶️ АКТИВЕН!")
     await update.message.reply_text("▶️ **АКТИВЕН!** Удаляет НЕ-фото.")
 
 async def status_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -58,41 +76,42 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
     global PAUSE_MODE
     if PAUSE_MODE or not update.channel_post:
         return
-    
+
     post = update.channel_post
     if post.chat_id != CHANNEL_ID:
         return
-    
+
     if not post.photo:
         try:
             await context.bot.delete_message(post.chat_id, post.message_id)
-            logger.info(f"🗑️ УДАЛЕНО сообщение #{post.message_id}")
+            logger.info(f"🗑️ УДАЛЕНО #{post.message_id}")
         except Exception as e:
-            logger.error(f"❌ Ошибка удаления: {e}")
+            logger.error(f"❌ {e}")
 
 def main():
-    print("🚀 PhotoOnly Bot v2.0 - Совместим с Python 3.13")
+    print("🚀 PhotoOnly Bot v2.0 с Health Check")
     
-    # Создаём Application
+    # Запуск Flask в отдельном потоке
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    print("🌐 HTTP сервер запущен для UptimeRobot")
+
+    # Telegram Application
     application = Application.builder().token(BOT_TOKEN).build()
-    
+
     # Команды
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("pause", pause_bot))
     application.add_handler(CommandHandler("resume", resume_bot))
     application.add_handler(CommandHandler("status", status_bot))
-    
+
     # Канал
     application.add_handler(MessageHandler(
         filters.ChatType.CHANNEL & filters.Chat(chat_id=CHANNEL_ID),
         handle_channel_post
     ))
-    
-    print("✅ Все обработчики добавлены")
-    print("📱 Тест: /start в личке бота")
-    
-    # Запуск polling
-    print("🚀 Запуск...")
+
+    print("✅ Запуск Telegram polling...")
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
