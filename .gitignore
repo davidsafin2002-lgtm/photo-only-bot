@@ -1,0 +1,36 @@
+# Секретные файлы
+.env
+.env.local
+.env.*.local
+.env.*.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.env
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+
+# Виртуальные окружения
+env/
+venv/
+.venv/
+ENV/
+
+# Логи
+*.log
+logs/
+
+# IDE и редакторы
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ОС
+.DS_Store
+Thumbs.db
