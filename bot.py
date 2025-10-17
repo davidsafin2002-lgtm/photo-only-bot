@@ -15,7 +15,7 @@ CHANNEL_ID = int(os.getenv('CHANNEL_ID', '-1001805328200'))
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'TAVDIN')  # Пароль по умолчанию
 ADMIN_CHAT_IDS = [int(x) for x in os.getenv('ADMIN_CHAT_IDS', '').split(',') if x]  # Список ID админов
 
-# Инициализация глобальной переменной PAUSE_MODE
+# Инициализация глобальной переменной
 PAUSE_MODE = False  # По умолчанию бот активен
 
 logging.basicConfig(
@@ -131,7 +131,10 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
     if post.chat_id != CHANNEL_ID:
         return
 
+    # Улучшенная проверка user_id
     user_id = post.from_user.id if post.from_user else None
+    logger.info(f"Проверка сообщения #{post.message_id} от пользователя {user_id or 'Неизвестно'}")
+    
     # Белый список: админы могут отправлять всё
     if user_id in ADMIN_CHAT_IDS:
         logger.info(f"👤 Админ {user_id} отправил сообщение #{post.message_id}")
