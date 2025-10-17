@@ -22,6 +22,9 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+
+# ✅ СКРЫВАЕМ ТОКЕН В ЛОГАХ HTTP
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 if not BOT_TOKEN or len(BOT_TOKEN) < 30:
