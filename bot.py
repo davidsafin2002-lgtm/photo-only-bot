@@ -63,14 +63,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🚫 Вы заблокированы и не можете использовать бот.")
         return
 
-    if user_id in ADMIN_CHAT_IDS or user_id in AUTHORIZED_USERS:
+    if user_id in ADMIN_CHAT_IDS:
+        status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
+        await update.message.reply_text(
+            f"🤖 **PhotoOnly Bot v2.3**\n\n"
+            f"📊 {status}\n"
+            f"📢 Канал: `{CHANNEL_ID}`\n\n"
+            f"🔐 Вы админ!\n"
+            f"👤 Ваши команды:\n"
+            f"⏸️ `/pause` - Приостановить\n"
+            f"▶️ `/resume` - Возобновить\n"
+            f"ℹ️ `/status` - Статус\n"
+            f"🔓 `/logout` - Выйти\n"
+            f"🔑 `/list_auth` - Список авторизованных\n"
+            f"🔓 `/deauth <ID>` - Деавторизовать\n"
+            f"🚫 `/ban <ID>` - Заблокировать\n"
+            f"✅ `/unban <ID>` - Разблокировать",
+            parse_mode='Markdown'
+        )
+    elif user_id in AUTHORIZED_USERS:
         status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
         await update.message.reply_text(
             f"🤖 **PhotoOnly Bot v2.3**\n\n"
             f"📊 {status}\n"
             f"📢 Канал: `{CHANNEL_ID}`\n\n"
             f"🔐 Вы авторизованы!\n"
-            f"👤 Команды:\n"
+            f"👤 Ваши команды:\n"
             f"⏸️ `/pause` - Приостановить\n"
             f"▶️ `/resume` - Возобновить\n"
             f"ℹ️ `/status` - Статус\n"
