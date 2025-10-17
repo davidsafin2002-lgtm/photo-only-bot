@@ -91,8 +91,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"👤 Ваши команды:\n"
             f"⏸️ `/pause` - Приостановить\n"
             f"▶️ `/resume` - Возобновить\n"
-            f"ℹ️ `/status` - Статус\n"
-            f"🔓 `/logout` - Выйти",
+            f"ℹ️ `/status` - Статус\n",
             parse_mode='Markdown'
         )
     else:
