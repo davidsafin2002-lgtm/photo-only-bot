@@ -56,7 +56,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in ADMIN_CHAT_IDS or user_id in AUTHORIZED_USERS:
         status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
         await update.message.reply_text(
-            f"🤖 **PhotoOnly Bot v2.1**\n\n"
+            f"🤖 **PhotoOnly Bot v2.2**\n\n"
             f"📊 {status}\n"
             f"📢 Канал: `{CHANNEL_ID}`\n\n"
             f"🔐 Вы авторизованы!\n"
@@ -76,7 +76,10 @@ async def auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
         password = context.args[0]
         if password == ADMIN_PASSWORD:
             AUTHORIZED_USERS[user_id] = True
-            await update.message.reply_text("✅ Авторизация успешна! Используйте команды.")
+            await update.message.reply_text(
+                "✅ Авторизация успешна!\n"
+                "🔑 Пожалуйста, нажмите /start, чтобы увидеть команды."
+            )
         else:
             await update.message.reply_text("❌ Неверный пароль! Попробуйте снова.")
     else:
@@ -114,10 +117,12 @@ async def status_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id in ADMIN_CHAT_IDS or user_id in AUTHORIZED_USERS:
         status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
+        authorized_count = len(AUTHORIZED_USERS)
         await update.message.reply_text(
             f"📊 **{status}**\n"
             f"📢 Канал: `{CHANNEL_ID}`\n"
-            f"👤 Админы: {len(ADMIN_CHAT_IDS)}",
+            f"👤 Админы: {len(ADMIN_CHAT_IDS)}\n"
+            f"🔑 Авторизовано пользователей: {authorized_count}",
             parse_mode='Markdown'
         )
     else:
@@ -131,15 +136,11 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
     if post.chat_id != CHANNEL_ID:
         return
 
-    # Улучшенная проверка user_id
+    # Логирование для отладки (user_id может быть None в канале)
     user_id = post.from_user.id if post.from_user else None
     logger.info(f"Проверка сообщения #{post.message_id} от пользователя {user_id or 'Неизвестно'}")
     
-    # Белый список: админы могут отправлять всё
-    if user_id in ADMIN_CHAT_IDS:
-        logger.info(f"👤 Админ {user_id} отправил сообщение #{post.message_id}")
-        return
-
+    # Белый список отключён для канала (из-за отсутствия user_id)
     if not PAUSE_MODE and not post.photo:
         try:
             await context.bot.delete_message(post.chat_id, post.message_id)
@@ -148,7 +149,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             logger.error(f"❌ {e}")
 
 def main():
-    print("🚀 PhotoOnly Bot v2.1 с авторизацией и админами")
+    print("🚀 PhotoOnly Bot v2.2 с авторизацией и статистикой")
     
     # Запуск Flask
     flask_thread = threading.Thread(target=run_flask, daemon=True)
