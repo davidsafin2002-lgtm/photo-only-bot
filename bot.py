@@ -203,6 +203,9 @@ async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.args:
         try:
             target_id = int(context.args[0])
+            if target_id in ADMIN_CHAT_IDS:
+                await update.message.reply_text("❌ Нельзя заблокировать администратора!")
+                return
             BANNED_USERS.add(target_id)
             await update.message.reply_text(f"🚫 Пользователь {target_id} заблокирован.")
         except ValueError:
