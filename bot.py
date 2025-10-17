@@ -15,6 +15,9 @@ CHANNEL_ID = int(os.getenv('CHANNEL_ID', '-1001805328200'))
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'TAVDIN')  # Пароль по умолчанию
 ADMIN_CHAT_IDS = [int(x) for x in os.getenv('ADMIN_CHAT_IDS', '').split(',') if x]  # Список ID админов
 
+# Инициализация глобальной переменной PAUSE_MODE
+PAUSE_MODE = False  # По умолчанию бот активен
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -51,7 +54,7 @@ AUTHORIZED_USERS = {}
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id in ADMIN_CHAT_IDS or user_id in AUTHORIZED_USERS:
-        status = "⏸️ ПАУЗА" if 'PAUSE_MODE' in globals() and PAUSE_MODE else "▶️ АКТИВЕН"
+        status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
         await update.message.reply_text(
             f"🤖 **PhotoOnly Bot v2.1**\n\n"
             f"📊 {status}\n"
@@ -110,7 +113,7 @@ async def resume_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def status_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id in ADMIN_CHAT_IDS or user_id in AUTHORIZED_USERS:
-        status = "⏸️ ПАУЗА" if 'PAUSE_MODE' in globals() and PAUSE_MODE else "▶️ АКТИВЕН"
+        status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
         await update.message.reply_text(
             f"📊 **{status}**\n"
             f"📢 Канал: `{CHANNEL_ID}`\n"
