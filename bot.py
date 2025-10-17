@@ -96,7 +96,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
     else:
-        await update.message.reply_text("🔐 Введите пароль для авторизации:\n`/auth <ваш_пароль>`")
+        await update.message.reply_text("🔐 Введите пароль для авторизации:\n`/auth ваш_пароль`")
 
 async def auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -115,7 +115,7 @@ async def auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text("❌ Неверный пароль! Попробуйте снова.")
     else:
-        await update.message.reply_text("🔐 Пожалуйста, укажите пароль: `/auth <ваш_пароль>`")
+        await update.message.reply_text("🔐 Пожалуйста, укажите пароль: `/auth ваш_пароль`")
 
 async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
