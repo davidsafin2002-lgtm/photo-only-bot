@@ -45,7 +45,7 @@ def run_flask():
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
 
-# Хранилище авторизованных пользователей (в памяти)
+# Хранилище авторизованных пользователей
 AUTHORIZED_USERS = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -75,9 +75,9 @@ async def auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
             AUTHORIZED_USERS[user_id] = True
             await update.message.reply_text("✅ Авторизация успешна! Используйте команды.")
         else:
-            await update.message.reply_text("❌ Неверный пароль!")
+            await update.message.reply_text("❌ Неверный пароль! Попробуйте снова.")
     else:
-        await update.message.reply_text("🔐 Укажите пароль: `/auth TAVDIN`")
+        await update.message.reply_text("🔐 Пожалуйста, укажите пароль: `/auth <ваш_пароль>`")
 
 async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
