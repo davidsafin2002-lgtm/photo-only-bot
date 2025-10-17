@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.error import TelegramError
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -57,6 +58,14 @@ AUTHORIZED_USERS = {}
 # Хранилище заблокированных пользователей
 BANNED_USERS = set()
 
+# Проверка подписки на канал
+async def is_user_member(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    try:
+        member = await context.bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
+        return member.status in ['member', 'administrator', 'creator']
+    except TelegramError:
+        return False
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id in BANNED_USERS:
@@ -66,7 +75,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in ADMIN_CHAT_IDS:
         status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
         await update.message.reply_text(
-            f"🤖 **PhotoOnly Bot v2.3**\n\n"
+            f"🤖 **PhotoOnly Bot v2.4**\n\n"
             f"📊 {status}\n"
             f"📢 Канал: `{CHANNEL_ID}`\n\n"
             f"🔐 Вы админ!\n"
@@ -84,7 +93,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif user_id in AUTHORIZED_USERS:
         status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
         await update.message.reply_text(
-            f"🤖 **PhotoOnly Bot v2.3**\n\n"
+            f"🤖 **PhotoOnly Bot v2.4**\n\n"
             f"📊 {status}\n"
             f"📢 Канал: `{CHANNEL_ID}`\n\n"
             f"🔐 Вы авторизованы!\n"
@@ -101,6 +110,28 @@ async def auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id in BANNED_USERS:
         await update.message.reply_text("🚫 Вы заблокированы и не можете авторизоваться.")
+        return
+
+    # Пропускаем проверку подписки для админов
+    if user_id in ADMIN_CHAT_IDS:
+        if context.args:
+            password = context.args[0]
+            if password == ADMIN_PASSWORD:
+                AUTHORIZED_USERS[user_id] = True
+                await update.message.reply_text(
+                    "✅ Авторизация успешна!\n"
+                    "🔑 Пожалуйста, нажмите /start, чтобы увидеть команды."
+                )
+            else:
+                await update.message.reply_text("❌ Неверный пароль! Попробуйте снова.")
+        else:
+            await update.message.reply_text("🔐 Пожалуйста, укажите пароль: `/auth ваш_пароль`")
+        return
+
+    # Проверка подписки для обычных пользователей
+    is_member = await is_user_member(user_id, context)
+    if not is_member:
+        await update.message.reply_text("❌ Вы должны быть подписаны на канал для авторизации!")
         return
 
     if context.args:
@@ -247,7 +278,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             logger.error(f"❌ {e}")
 
 def main():
-    print("🚀 PhotoOnly Bot v2.3 с управлением авторизацией")
+    print("🚀 PhotoOnly Bot v2.4 с проверкой подписки")
     
     # Запуск Flask
     flask_thread = threading.Thread(target=run_flask, daemon=True)
