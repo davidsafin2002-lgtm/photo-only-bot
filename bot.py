@@ -63,8 +63,20 @@ async def is_user_member(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bo
     try:
         member = await context.bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
         return member.status in ['member', 'administrator', 'creator']
-    except TelegramError:
+    except TelegramError as e:
+        logger.warning(f"Ошибка проверки подписки для {user_id}: {e}")
         return False
+
+# Проверка авторизации и подписки (общая функция)
+async def check_access(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    if user_id in BANNED_USERS:
+        return False
+    if user_id in ADMIN_CHAT_IDS:
+        return True  # Админы пропускаются
+    if user_id not in AUTHORIZED_USERS:
+        return False
+    # Проверка подписки для авторизованных
+    return await is_user_member(user_id, context)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -75,7 +87,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in ADMIN_CHAT_IDS:
         status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
         await update.message.reply_text(
-            f"🤖 **PhotoOnly Bot v2.4**\n\n"
+            f"🤖 **PhotoOnly Bot v2.5**\n\n"
             f"📊 {status}\n"
             f"📢 Канал: `{CHANNEL_ID}`\n\n"
             f"🔐 Вы админ!\n"
@@ -87,24 +99,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🔑 `/list_auth` - Список авторизованных\n"
             f"🔓 `/deauth <ID>` - Деавторизовать\n"
             f"🚫 `/ban <ID>` - Заблокировать\n"
-            f"✅ `/unban <ID>` - Разблокировать",
+            f"✅ `/unban <ID>` - Разблокирован",
             parse_mode='Markdown'
         )
     elif user_id in AUTHORIZED_USERS:
+        is_member = await is_user_member(user_id, context)
+        if not is_member:
+            del AUTHORIZED_USERS[user_id]  # Отменяем авторизацию
+            await update.message.reply_text("❌ Вы отписались от канала. Авторизация отменена. Подпишитесь и используйте /auth.")
+            return
         status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
         await update.message.reply_text(
-            f"🤖 **PhotoOnly Bot v2.4**\n\n"
+            f"🤖 **PhotoOnly Bot v2.5**\n\n"
             f"📊 {status}\n"
             f"📢 Канал: `{CHANNEL_ID}`\n\n"
             f"🔐 Вы авторизованы!\n"
             f"👤 Ваши команды:\n"
             f"⏸️ `/pause` - Приостановить\n"
             f"▶️ `/resume` - Возобновить\n"
-            f"ℹ️ `/status` - Статус\n",
+            f"ℹ️ `/status` - Статус\n"
+            f"🔓 `/logout` - Выйти",
             parse_mode='Markdown'
         )
     else:
-        await update.message.reply_text("🔐 Введите пароль для авторизации:\n`/auth ваш_пароль`")
+        await update.message.reply_text("🔐 Введите пароль для авторизации:\n`/auth <ваш_пароль>`")
 
 async def auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -125,7 +143,7 @@ async def auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_text("❌ Неверный пароль! Попробуйте снова.")
         else:
-            await update.message.reply_text("🔐 Пожалуйста, укажите пароль: `/auth ваш_пароль`")
+            await update.message.reply_text("🔐 Пожалуйста, укажите пароль: `/auth <ваш_пароль>`")
         return
 
     # Проверка подписки для обычных пользователей
@@ -145,7 +163,7 @@ async def auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text("❌ Неверный пароль! Попробуйте снова.")
     else:
-        await update.message.reply_text("🔐 Пожалуйста, укажите пароль: `/auth ваш_пароль`")
+        await update.message.reply_text("🔐 Пожалуйста, укажите пароль: `/auth <ваш_пароль>`")
 
 async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -157,9 +175,17 @@ async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def pause_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    if user_id not in ADMIN_CHAT_IDS and user_id not in AUTHORIZED_USERS:
-        await update.message.reply_text("🔐 Только для авторизованных!")
-        return
+    if user_id not in ADMIN_CHAT_IDS:
+        # Проверка подписки для авторизованных пользователей
+        if user_id not in AUTHORIZED_USERS:
+            await update.message.reply_text("🔐 Только для авторизованных!")
+            return
+        is_member = await is_user_member(user_id, context)
+        if not is_member:
+            del AUTHORIZED_USERS[user_id]  # Отменяем авторизацию
+            await update.message.reply_text("❌ Вы отписались от канала. Авторизация отменена. Подпишитесь и используйте /auth.")
+            return
+
     global PAUSE_MODE
     PAUSE_MODE = True
     logger.info(f"⏸️ ПАУЗА от {user_id}")
@@ -167,9 +193,17 @@ async def pause_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def resume_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    if user_id not in ADMIN_CHAT_IDS and user_id not in AUTHORIZED_USERS:
-        await update.message.reply_text("🔐 Только для авторизованных!")
-        return
+    if user_id not in ADMIN_CHAT_IDS:
+        # Проверка подписки для авторизованных пользователей
+        if user_id not in AUTHORIZED_USERS:
+            await update.message.reply_text("🔐 Только для авторизованных!")
+            return
+        is_member = await is_user_member(user_id, context)
+        if not is_member:
+            del AUTHORIZED_USERS[user_id]  # Отменяем авторизацию
+            await update.message.reply_text("❌ Вы отписались от канала. Авторизация отменена. Подпишитесь и используйте /auth.")
+            return
+
     global PAUSE_MODE
     PAUSE_MODE = False
     logger.info(f"▶️ АКТИВЕН от {user_id}")
@@ -177,9 +211,17 @@ async def resume_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def status_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    if user_id not in ADMIN_CHAT_IDS and user_id not in AUTHORIZED_USERS:
-        await update.message.reply_text("🔐 Только для авторизованных!")
-        return
+    if user_id not in ADMIN_CHAT_IDS:
+        # Проверка подписки для авторизованных пользователей
+        if user_id not in AUTHORIZED_USERS:
+            await update.message.reply_text("🔐 Только для авторизованных!")
+            return
+        is_member = await is_user_member(user_id, context)
+        if not is_member:
+            del AUTHORIZED_USERS[user_id]  # Отменяем авторизацию
+            await update.message.reply_text("❌ Вы отписались от канала. Авторизация отменена. Подпишитесь и используйте /auth.")
+            return
+
     status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
     authorized_count = len(AUTHORIZED_USERS)
     await update.message.reply_text(
@@ -278,7 +320,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             logger.error(f"❌ {e}")
 
 def main():
-    print("🚀 PhotoOnly Bot v2.4 с проверкой подписки")
+    print("🚀 PhotoOnly Bot v2.5 с проверкой подписки перед каждой командой")
     
     # Запуск Flask
     flask_thread = threading.Thread(target=run_flask, daemon=True)
