@@ -117,12 +117,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"👤 Ваши команды:\n"
             f"⏸️ `/pause` - Приостановить\n"
             f"▶️ `/resume` - Возобновить\n"
-            f"ℹ️ `/status` - Статус\n"
-            f"🔓 `/logout` - Выйти",
+            f"ℹ️ `/status` - Статус\n",
             parse_mode='Markdown'
         )
     else:
-        await update.message.reply_text("🔐 Введите пароль для авторизации:\n`/auth <ваш_пароль>`")
+        await update.message.reply_text("🔐 Введите пароль для авторизации:\n`/auth ваш_пароль`")
 
 async def auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -143,7 +142,7 @@ async def auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_text("❌ Неверный пароль! Попробуйте снова.")
         else:
-            await update.message.reply_text("🔐 Пожалуйста, укажите пароль: `/auth <ваш_пароль>`")
+            await update.message.reply_text("🔐 Пожалуйста, укажите пароль: `/auth ваш_пароль`")
         return
 
     # Проверка подписки для обычных пользователей
@@ -163,7 +162,7 @@ async def auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text("❌ Неверный пароль! Попробуйте снова.")
     else:
-        await update.message.reply_text("🔐 Пожалуйста, укажите пароль: `/auth <ваш_пароль>`")
+        await update.message.reply_text("🔐 Пожалуйста, укажите пароль: `/auth ваш_пароль`")
 
 async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
