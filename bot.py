@@ -95,38 +95,38 @@ async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def pause_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    if user_id in ADMIN_CHAT_IDS or user_id in AUTHORIZED_USERS:
-        global PAUSE_MODE
-        PAUSE_MODE = True
-        logger.info(f"⏸️ ПАУЗА от {user_id}")
-        await update.message.reply_text("⏸️ **ПАУЗА!** Удаление остановлено.")
-    else:
+    if user_id not in ADMIN_CHAT_IDS and user_id not in AUTHORIZED_USERS:
         await update.message.reply_text("🔐 Только для авторизованных!")
+        return
+    global PAUSE_MODE
+    PAUSE_MODE = True
+    logger.info(f"⏸️ ПАУЗА от {user_id}")
+    await update.message.reply_text("⏸️ **ПАУЗА!** Удаление остановлено.")
 
 async def resume_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    if user_id in ADMIN_CHAT_IDS or user_id in AUTHORIZED_USERS:
-        global PAUSE_MODE
-        PAUSE_MODE = False
-        logger.info(f"▶️ АКТИВЕН от {user_id}")
-        await update.message.reply_text("▶️ **АКТИВЕН!** Удаляет НЕ-фото.")
-    else:
+    if user_id not in ADMIN_CHAT_IDS and user_id not in AUTHORIZED_USERS:
         await update.message.reply_text("🔐 Только для авторизованных!")
+        return
+    global PAUSE_MODE
+    PAUSE_MODE = False
+    logger.info(f"▶️ АКТИВЕН от {user_id}")
+    await update.message.reply_text("▶️ **АКТИВЕН!** Удаляет НЕ-фото.")
 
 async def status_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    if user_id in ADMIN_CHAT_IDS or user_id in AUTHORIZED_USERS:
-        status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
-        authorized_count = len(AUTHORIZED_USERS)
-        await update.message.reply_text(
-            f"📊 **{status}**\n"
-            f"📢 Канал: `{CHANNEL_ID}`\n"
-            f"👤 Админы: {len(ADMIN_CHAT_IDS)}\n"
-            f"🔑 Авторизовано пользователей: {authorized_count}",
-            parse_mode='Markdown'
-        )
-    else:
+    if user_id not in ADMIN_CHAT_IDS and user_id not in AUTHORIZED_USERS:
         await update.message.reply_text("🔐 Только для авторизованных!")
+        return
+    status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
+    authorized_count = len(AUTHORIZED_USERS)
+    await update.message.reply_text(
+        f"📊 **{status}**\n"
+        f"📢 Канал: `{CHANNEL_ID}`\n"
+        f"👤 Админы: {len(ADMIN_CHAT_IDS)}\n"
+        f"🔑 Авторизовано пользователей: {authorized_count}",
+        parse_mode='Markdown'
+    )
 
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.channel_post:
@@ -136,11 +136,10 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
     if post.chat_id != CHANNEL_ID:
         return
 
-    # Логирование для отладки (user_id может быть None в канале)
+    # Логирование для отладки
     user_id = post.from_user.id if post.from_user else None
     logger.info(f"Проверка сообщения #{post.message_id} от пользователя {user_id or 'Неизвестно'}")
     
-    # Белый список отключён для канала (из-за отсутствия user_id)
     if not PAUSE_MODE and not post.photo:
         try:
             await context.bot.delete_message(post.chat_id, post.message_id)
