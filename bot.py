@@ -59,7 +59,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in ADMIN_CHAT_IDS or user_id in AUTHORIZED_USERS:
         status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
         await update.message.reply_text(
-            f"🤖 **PhotoOnly Bot v2.2**\n\n"
+            f"🤖 **PhotoOnly Bot v2.3**\n\n"
             f"📊 {status}\n"
             f"📢 Канал: `{CHANNEL_ID}`\n\n"
             f"🔐 Вы авторизованы!\n"
@@ -114,7 +114,7 @@ async def resume_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global PAUSE_MODE
     PAUSE_MODE = False
     logger.info(f"▶️ АКТИВЕН от {user_id}")
-    await update.message.reply_text("▶️ **АКТИВЕН!** Удаляет НЕ-фото.")
+    await update.message.reply_text("▶️ **АКТИВЕН!** Удаляет НЕ-фото и НЕ-видео.")
 
 async def status_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -143,7 +143,8 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = post.from_user.id if post.from_user else None
     logger.info(f"Проверка сообщения #{post.message_id} от пользователя {user_id or 'Неизвестно'}")
     
-    if not PAUSE_MODE and not post.photo:
+    # Оставляем фото и видео, удаляем всё остальное
+    if not PAUSE_MODE and not (post.photo or post.video):
         try:
             await context.bot.delete_message(post.chat_id, post.message_id)
             logger.info(f"🗑️ УДАЛЕНО #{post.message_id}")
@@ -151,7 +152,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             logger.error(f"❌ {e}")
 
 def main():
-    print("🚀 PhotoOnly Bot v2.2 с авторизацией и статистикой")
+    print("🚀 PhotoOnly Bot v2.3 с авторизацией и поддержкой видео")
     
     # Запуск Flask
     flask_thread = threading.Thread(target=run_flask, daemon=True)
