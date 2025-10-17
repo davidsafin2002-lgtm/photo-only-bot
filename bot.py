@@ -23,7 +23,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# ✅ СКРЫВАЕМ ТОКЕН В ЛОГАХ HTTP
+# Скрываем токен в логах HTTP
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,15 @@ def run_flask():
 # Хранилище авторизованных пользователей
 AUTHORIZED_USERS = {}
 
+# Хранилище заблокированных пользователей
+BANNED_USERS = set()
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
+    if user_id in BANNED_USERS:
+        await update.message.reply_text("🚫 Вы заблокированы и не можете использовать бот.")
+        return
+
     if user_id in ADMIN_CHAT_IDS or user_id in AUTHORIZED_USERS:
         status = "⏸️ ПАУЗА" if PAUSE_MODE else "▶️ АКТИВЕН"
         await update.message.reply_text(
@@ -75,6 +82,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
+    if user_id in BANNED_USERS:
+        await update.message.reply_text("🚫 Вы заблокированы и не можете авторизоваться.")
+        return
+
     if context.args:
         password = context.args[0]
         if password == ADMIN_PASSWORD:
@@ -131,6 +142,71 @@ async def status_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
+# Команды для админов: управление авторизованными пользователями
+async def list_auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id not in ADMIN_CHAT_IDS:
+        await update.message.reply_text("🔐 Только для админов!")
+        return
+    if AUTHORIZED_USERS:
+        user_list = "\n".join([f"• {uid}" for uid in AUTHORIZED_USERS.keys()])
+        await update.message.reply_text(
+            f"🔑 **Авторизованные пользователи:**\n"
+            f"{user_list}\n"
+            f"👥 Всего: {len(AUTHORIZED_USERS)}",
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text("🔑 Нет авторизованных пользователей.")
+
+async def deauth_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id not in ADMIN_CHAT_IDS:
+        await update.message.reply_text("🔐 Только для админов!")
+        return
+    if context.args:
+        try:
+            target_id = int(context.args[0])
+            if target_id in AUTHORIZED_USERS:
+                del AUTHORIZED_USERS[target_id]
+                await update.message.reply_text(f"✅ Пользователь {target_id} деавторизован.")
+            else:
+                await update.message.reply_text(f"❌ Пользователь {target_id} не авторизован.")
+        except ValueError:
+            await update.message.reply_text("❌ Укажите ID: `/deauth 123456789`")
+    else:
+        await update.message.reply_text("❌ Укажите ID: `/deauth 123456789`")
+
+async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id not in ADMIN_CHAT_IDS:
+        await update.message.reply_text("🔐 Только для админов!")
+        return
+    if context.args:
+        try:
+            target_id = int(context.args[0])
+            BANNED_USERS.add(target_id)
+            await update.message.reply_text(f"🚫 Пользователь {target_id} заблокирован.")
+        except ValueError:
+            await update.message.reply_text("❌ Укажите ID: `/ban 123456789`")
+    else:
+        await update.message.reply_text("❌ Укажите ID: `/ban 123456789`")
+
+async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id not in ADMIN_CHAT_IDS:
+        await update.message.reply_text("🔐 Только для админов!")
+        return
+    if context.args:
+        try:
+            target_id = int(context.args[0])
+            BANNED_USERS.discard(target_id)
+            await update.message.reply_text(f"✅ Пользователь {target_id} разблокирован.")
+        except ValueError:
+            await update.message.reply_text("❌ Укажите ID: `/unban 123456789`")
+    else:
+        await update.message.reply_text("❌ Укажите ID: `/unban 123456789`")
+
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.channel_post:
         return
@@ -143,8 +219,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = post.from_user.id if post.from_user else None
     logger.info(f"Проверка сообщения #{post.message_id} от пользователя {user_id or 'Неизвестно'}")
     
-    # Оставляем фото и видео, удаляем всё остальное
-    if not PAUSE_MODE and not (post.photo or post.video):
+    if not PAUSE_MODE and not post.photo and not post.video:
         try:
             await context.bot.delete_message(post.chat_id, post.message_id)
             logger.info(f"🗑️ УДАЛЕНО #{post.message_id}")
@@ -152,7 +227,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             logger.error(f"❌ {e}")
 
 def main():
-    print("🚀 PhotoOnly Bot v2.3 с авторизацией и поддержкой видео")
+    print("🚀 PhotoOnly Bot v2.3 с управлением авторизацией")
     
     # Запуск Flask
     flask_thread = threading.Thread(target=run_flask, daemon=True)
@@ -162,13 +237,21 @@ def main():
     # Telegram Application
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # Команды
+    # Команды для всех
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("auth", auth))
     application.add_handler(CommandHandler("logout", logout))
+
+    # Команды для авторизованных
     application.add_handler(CommandHandler("pause", pause_bot))
     application.add_handler(CommandHandler("resume", resume_bot))
     application.add_handler(CommandHandler("status", status_bot))
+
+    # Команды для админов
+    application.add_handler(CommandHandler("list_auth", list_auth))
+    application.add_handler(CommandHandler("deauth", deauth_user))
+    application.add_handler(CommandHandler("ban", ban_user))
+    application.add_handler(CommandHandler("unban", unban_user))
 
     # Канал
     application.add_handler(MessageHandler(
