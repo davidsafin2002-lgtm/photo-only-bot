@@ -185,6 +185,7 @@ async def status_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Только для авторизованных!")
         return
     status = "ПАУЗА" if PAUSE_MODE else "АКТИВЕН"
+    fwd_status = "ВКЛЮЧЕНА" if FORWARD_ENABLED else "ВЫКЛЮЧЕНА"
     await update.message.reply_text(
         f"<b>{status}</b>\n"
         f"Канал: <code>{CHANNEL_ID}</code>\n"
@@ -313,7 +314,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             except Exception as e:
                 logger.error(f"ОШИБКА пересылки {target_id}: {e}")
 
-# === АВТОУДАЛЕНИЕ СООБЩЕНИЙ В ЛИЧКЕ СУПЕР-АДМИНА ===
+# === АВТОУДАЛЕНИЕ СТАРЫХ СООБЩЕНИЙ ===
 async def cleanup_old_messages(application: Application):
     if not SUPER_ADMIN_ID:
         return
@@ -338,9 +339,44 @@ def start_cleanup_job(application: Application):
     async def job():
         while True:
             await cleanup_old_messages(application)
-            await asyncio.sleep(6 * 60 * 60)  # каждые 6 часов
+            await asyncio.sleep(6 * 60 * 60)
     asyncio.create_task(job())
 
 # === ЗАПУСК ===
 def main():
-    print("PhotoOnly Bot v2.9 |...
+    print("PhotoOnly Bot v2.9 | Автоудаление старых пересланных сообщений (2 суток)")
+
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    print("HTTP сервер запущен")
+
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    # Команды
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("auth", auth))
+    application.add_handler(CommandHandler("logout", logout))
+    application.add_handler(CommandHandler("pause", pause_bot))
+    application.add_handler(CommandHandler("resume", resume_bot))
+    application.add_handler(CommandHandler("status", status_bot))
+    application.add_handler(CommandHandler("forward", forward_control))
+    application.add_handler(CommandHandler("list_auth", list_auth))
+    application.add_handler(CommandHandler("deauth", deauth_user))
+    application.add_handler(CommandHandler("ban", ban_user))
+    application.add_handler(CommandHandler("unban", unban_user))
+
+    # Канал
+    application.add_handler(MessageHandler(
+        filters.ChatType.CHANNEL & filters.Chat(chat_id=CHANNEL_ID),
+        handle_channel_post
+    ))
+
+    # Автоочистка
+    if SUPER_ADMIN_ID:
+        application.job_queue.run_once(lambda ctx: start_cleanup_job(application), 10)
+
+    print("Запуск polling...")
+    application.run_polling(drop_pending_updates=True)
+
+if __name__ == '__main__':
+    main()
