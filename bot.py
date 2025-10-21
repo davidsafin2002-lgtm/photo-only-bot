@@ -202,7 +202,7 @@ async def forward_control(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not context.args:
-        await update.message.reply_text("Использование: `/forward on` или `/forward off`", parse_mode="Markdown")
+        await update.message.reply_text("Использование: /forward on или /forward off", parse_mode="Markdown")
         return
 
     arg = context.args[0].lower()
