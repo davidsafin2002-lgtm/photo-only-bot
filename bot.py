@@ -172,8 +172,6 @@ async def pause_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"ПАУЗА от {user_id}")
     await update.message.reply_text("<b>ПАУЗА!</b> Удаление остановлено.", parse_mode="HTML")
 
-async
-
 async def resume_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if not await check_access(user_id, context):
