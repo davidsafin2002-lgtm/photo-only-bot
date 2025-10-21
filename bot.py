@@ -78,14 +78,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Канал: `{CHANNEL_ID}`\n\n"
             f"Вы админ!\n"
             f"Команды:\n"
-            f"/pause - Приостановить\n"
-            f"/resume - Возобновить\n"
-            f"/status - Статус\n"
-            f"/logout - Выйти\n"
-            f"/list_auth - Список авторизованных\n"
-            f"/deauth <ID> - Деавторизовать\n"
-            f"/ban <ID> - Заблокировать\n"
-            f"/unban <ID> - Разблокировать",
+            f"`/pause` - Приостановить\n"
+            f"`/resume` - Возобновить\n"
+            f"`/status` - Статус\n"
+            f"`/logout` - Выйти\n"
+            f"`/list_auth` - Список авторизованных\n"
+            f"`/deauth <ID>` - Деавторизовать\n"
+            f"`/ban <ID>` - Заблокировать\n"
+            f"`/unban <ID>` - Разблокировать",
             parse_mode='Markdown'
         )
     elif user_id in AUTHORIZED_USERS:
@@ -101,9 +101,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Канал: `{CHANNEL_ID}`\n\n"
             f"Вы авторизованы!\n"
             f"Команды:\n"
-            f"/pause - Приостановить\n"
-            f"/resume - Возобновить\n"
-            f"/status - Статус\n",
+            f"`/pause` - Приостановить\n"
+            f"`/resume` - Возобновить\n"
+            f"`/status` - Статус\n"
+            f"`/logout` - Выйти",
             parse_mode='Markdown'
         )
     else:
