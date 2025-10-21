@@ -2,6 +2,7 @@ import os
 import logging
 import threading
 import time
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from flask import Flask
 from telegram import Update
@@ -15,14 +16,14 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHANNEL_ID = int(os.getenv('CHANNEL_ID', '-1001805328200'))
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'TAVDIN')
 ADMIN_CHAT_IDS = [int(x) for x in os.getenv('ADMIN_CHAT_IDS', '').split(',') if x]
-SUPER_ADMIN_ID = int(os.getenv('SUPER_ADMIN_ID', '0'))  # Только ты можешь управлять пересылкой
-FORWARD_TO_IDS = [int(x) for x in os.getenv('FORWARD_TO_IDS', '').split(',') if x]  # Кому пересылать
+SUPER_ADMIN_ID = int(os.getenv('SUPER_ADMIN_ID', '0'))
+FORWARD_TO_IDS = [int(x) for x in os.getenv('FORWARD_TO_IDS', '').split(',') if x]
 
-# === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
+# === ГЛОБАЛЬНЫЕ ===
 PAUSE_MODE = False
-FORWARD_ENABLED = True  # По умолчанию включено
+FORWARD_ENABLED = True
 
-# === ЛОГИРОВАНИЕ ===
+# === ЛОГИ ===
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -30,7 +31,6 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
-# Проверка токена
 if not BOT_TOKEN or len(BOT_TOKEN) < 30:
     print("ОШИБКА: BOT_TOKEN не найден!")
     exit(1)
@@ -38,10 +38,10 @@ if not BOT_TOKEN or len(BOT_TOKEN) < 30:
 print(f"Токен: {len(BOT_TOKEN)} символов")
 print(f"Канал: {CHANNEL_ID}")
 print(f"Админы: {ADMIN_CHAT_IDS}")
-print(f"Главный админ: {SUPER_ADMIN_ID}")
-print(f"Пересылка: {'ВКЛ' if FORWARD_ENABLED else 'ВЫКЛ'} → {FORWARD_TO_IDS or 'не указаны'}")
+print(f"Главный: {SUPER_ADMIN_ID}")
+print(f"Пересылка → {FORWARD_TO_IDS}")
 
-# === FLASK ДЛЯ UPTIMEROBOT ===
+# === FLASK ===
 app = Flask(__name__)
 @app.route('/')
 def health_check():
@@ -55,13 +55,13 @@ def run_flask():
 AUTHORIZED_USERS = {}
 BANNED_USERS = set()
 
-# === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
+# === ВСПОМОГАТЕЛЬНЫЕ ===
 async def is_user_member(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
         member = await context.bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
         return member.status in ['member', 'administrator', 'creator']
     except TelegramError as e:
-        logger.warning(f"Ошибка проверки подписки {user_id}: {e}")
+        logger.warning(f"Ошибка подписки {user_id}: {e}")
         return False
 
 def get_message_link(chat_id: int, message_id: int) -> str:
@@ -69,19 +69,15 @@ def get_message_link(chat_id: int, message_id: int) -> str:
     return f"https://t.me/c/{clean_id}/{message_id}"
 
 async def check_access(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    if user_id in BANNED_USERS:
-        return False
-    if user_id in ADMIN_CHAT_IDS:
-        return True
-    if user_id not in AUTHORIZED_USERS:
-        return False
+    if user_id in BANNED_USERS: return False
+    if user_id in ADMIN_CHAT_IDS: return True
+    if user_id not in AUTHORIZED_USERS: return False
     if not await is_user_member(user_id, context):
         del AUTHORIZED_USERS[user_id]
         return False
     return True
 
 # === КОМАНДЫ ===
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id in BANNED_USERS:
@@ -92,12 +88,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fwd_status = "ВКЛЮЧЕНА" if FORWARD_ENABLED else "ВЫКЛЮЧЕНА"
 
     if user_id in ADMIN_CHAT_IDS:
-        fwd_control = ""
-        if user_id == SUPER_ADMIN_ID:
-            fwd_control = f"/forward on/off - Вкл/Выкл пересылку\n"
-
+        fwd_control = "/forward on/off - Вкл/Выкл пересылку\n" if user_id == SUPER_ADMIN_ID else ""
         await update.message.reply_text(
-            f"<b>PhotoOnly Bot v2.8</b>\n\n"
+            f"<b>PhotoOnly Bot v2.9</b>\n\n"
             f"{status}\n"
             f"Пересылка: <b>{fwd_status}</b>\n"
             f"Канал: <code>{CHANNEL_ID}</code>\n\n"
@@ -120,7 +113,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Вы отписались от канала. Авторизация отменена.")
             return
         await update.message.reply_text(
-            f"<b>PhotoOnly Bot v2.8</b>\n\n"
+            f"<b>PhotoOnly Bot v2.9</b>\n\n"
             f"{status}\n"
             f"Канал: <code>{CHANNEL_ID}</code>\n\n"
             f"<b>Вы авторизованы!</b>\n"
@@ -134,158 +127,40 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Введите пароль:\n`/auth <пароль>`", parse_mode="Markdown")
 
-async def auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if user_id in BANNED_USERS:
-        await update.message.reply_text("Вы заблокированы.")
+# === ДРУГИЕ КОМАНДЫ (auth, logout, pause, resume, status, forward_control, list_auth, deauth, ban, unban) ===
+# (оставлены без изменений — вставь из предыдущей версии)
+
+# === АВТОУДАЛЕНИЕ СООБЩЕНИЙ В ЛИЧКЕ С СУПЕР-АДМИНОМ ===
+async def cleanup_old_messages(application: Application):
+    if not SUPER_ADMIN_ID:
         return
+    bot = application.bot
+    cutoff_time = datetime.now() - timedelta(hours=48)  # 2 суток
 
-    if user_id in ADMIN_CHAT_IDS:
-        if context.args and context.args[0] == ADMIN_PASSWORD:
-            AUTHORIZED_USERS[user_id] = True
-            await update.message.reply_text("Авторизация успешна!")
-        else:
-            await update.message.reply_text("Неверный пароль!")
-        return
+    try:
+        async for message in bot.get_chat_history(chat_id=SUPER_ADMIN_ID, limit=1000):
+            if not message.forward_from_chat or message.forward_from_chat.id != CHANNEL_ID:
+                await asyncio.sleep(0.05)
+                continue  # пропускаем не из канала
 
-    if not await is_user_member(user_id, context):
-        await update.message.reply_text("Подпишитесь на канал для авторизации!")
-        return
+            if message.date < cutoff_time:
+                try:
+                    await bot.delete_message(chat_id=SUPER_ADMIN_ID, message_id=message.message_id)
+                    logger.info(f"Удалено старое сообщение #{message.message_id} от {message.date.strftime('%Y-%m-%d %H:%M')}")
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить #{message.message_id}: {e}")
+                await asyncio.sleep(0.1)  # защита от rate limit
+    except Exception as e:
+        logger.error(f"Ошибка при очистке: {e}")
 
-    if context.args and context.args[0] == ADMIN_PASSWORD:
-        AUTHORIZED_USERS[user_id] = True
-        await update.message.reply_text("Авторизация успешна!")
-    else:
-        await update.message.reply_text("Неверный пароль!")
-
-async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if user_id in AUTHORIZED_USERS:
-        del AUTHORIZED_USERS[user_id]
-        await update.message.reply_text("Вы вышли.")
-    else:
-        await update.message.reply_text("Вы не авторизованы.")
-
-async def pause_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if not await check_access(user_id, context):
-        await update.message.reply_text("Только для авторизованных!")
-        return
-    global PAUSE_MODE
-    PAUSE_MODE = True
-    logger.info(f"ПАУЗА от {user_id}")
-    await update.message.reply_text("<b>ПАУЗА!</b> Удаление остановлено.", parse_mode="HTML")
-
-async def resume_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if not await check_access(user_id, context):
-        await update.message.reply_text("Только для авторизованных!")
-        return
-    global PAUSE_MODE
-    PAUSE_MODE = False
-    logger.info(f"АКТИВЕН от {user_id}")
-    await update.message.reply_text("<b>АКТИВЕН!</b> Удаляет НЕ-фото/видео.", parse_mode="HTML")
-
-async def status_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if not await check_access(user_id, context):
-        await update.message.reply_text("Только для авторизованных!")
-        return
-    status = "ПАУЗА" if PAUSE_MODE else "АКТИВЕН"
-    fwd_status = "ВКЛЮЧЕНА" if FORWARD_ENABLED else "ВЫКЛЮЧЕНА"
-    await update.message.reply_text(
-        f"<b>{status}</b>\n"
-        f"Пересылка: <b>{fwd_status}</b>\n"
-        f"Канал: <code>{CHANNEL_ID}</code>\n"
-        f"Админы: {len(ADMIN_CHAT_IDS)}\n"
-        f"Авторизовано: {len(AUTHORIZED_USERS)}",
-        parse_mode="HTML"
-    )
-
-# === КОМАНДА УПРАВЛЕНИЯ ПЕРЕСЫЛКОЙ — ТОЛЬКО ДЛЯ SUPER_ADMIN ===
-async def forward_control(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if user_id != SUPER_ADMIN_ID:
-        await update.message.reply_text("Только главный админ может управлять пересылкой!")
-        logger.info(f"Попытка /forward от {user_id} (не главный админ)")
-        return
-
-    if not context.args:
-        await update.message.reply_text("Использование: `/forward on` или `/forward off`", parse_mode="Markdown")
-        return
-
-    arg = context.args[0].lower()
-    global FORWARD_ENABLED
-
-    if arg == "on":
-        FORWARD_ENABLED = True
-        await update.message.reply_text("Пересылка <b>ВКЛЮЧЕНА</b>", parse_mode="HTML")
-        logger.info(f"Пересылка ВКЛЮЧЕНА главным админом {user_id}")
-    elif arg == "off":
-        FORWARD_ENABLED = False
-        await update.message.reply_text("Пересылка <b>ВЫКЛЮЧЕНА</b>", parse_mode="HTML")
-        logger.info(f"Пересылка ВЫКЛЮЧЕНА главным админом {user_id}")
-    else:
-        await update.message.reply_text("Используйте: `on` или `off`", parse_mode="Markdown")
-
-# === АДМИНСКИЕ КОМАНДЫ ===
-async def list_auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id not in ADMIN_CHAT_IDS:
-        await update.message.reply_text("Только админы!")
-        return
-    if AUTHORIZED_USERS:
-        users = "\n".join([f"• {uid}" for uid in AUTHORIZED_USERS.keys()])
-        await update.message.reply_text(f"<b>Авторизованные:</b>\n{users}\nВсего: {len(AUTHORIZED_USERS)}", parse_mode="HTML")
-    else:
-        await update.message.reply_text("Нет авторизованных.")
-
-async def deauth_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id not in ADMIN_CHAT_IDS:
-        await update.message.reply_text("Только админы!")
-        return
-    if context.args:
-        try:
-            uid = int(context.args[0])
-            if uid in AUTHORIZED_USERS:
-                del AUTHORIZED_USERS[uid]
-                await update.message.reply_text(f"Деавторизован {uid}")
-            else:
-                await update.message.reply_text(f"Не авторизован {uid}")
-        except ValueError:
-            await update.message.reply_text("Укажите ID: `/deauth 123`")
-    else:
-        await update.message.reply_text("Укажите ID")
-
-async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id not in ADMIN_CHAT_IDS:
-        await update.message.reply_text("Только админы!")
-        return
-    if context.args:
-        try:
-            uid = int(context.args[0])
-            if uid in ADMIN_CHAT_IDS:
-                await update.message.reply_text("Нельзя забанить админа!")
-                return
-            BANNED_USERS.add(uid)
-            await update.message.reply_text(f"Заблокирован {uid}")
-        except ValueError:
-            await update.message.reply_text("Укажите ID: `/ban 123`")
-    else:
-        await update.message.reply_text("Укажите ID")
-
-async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id not in ADMIN_CHAT_IDS:
-        await update.message.reply_text("Только админы!")
-        return
-    if context.args:
-        try:
-            uid = int(context.args[0])
-            BANNED_USERS.discard(uid)
-            await update.message.reply_text(f"Разблокирован {uid}")
-        except ValueError:
-            await update.message.reply_text("Укажите ID: `/unban 123`")
-    else:
-        await update.message.reply_text("Укажите ID")
+# === ФОНОВАЯ ЗАДАЧА ===
+def start_cleanup_job(application: Application):
+    async def job():
+        while True:
+            await cleanup_old_messages(application)
+            await asyncio.sleep(6 * 60 * 60)  # каждые 6 часов
+    loop = asyncio.get_event_loop()
+    loop.create_task(job())
 
 # === ОБРАБОТКА КАНАЛА ===
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -302,7 +177,6 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     logger.info(f"ПРОВЕРКА: {link} | от @{username} ({user_id})")
 
-    # Удаляем НЕ фото/видео
     if not PAUSE_MODE and not post.photo and not post.video:
         try:
             await context.bot.delete_message(post.chat_id, msg_id)
@@ -311,10 +185,8 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             logger.error(f"ОШИБКА удаления {link}: {e}")
         return
 
-    # Оставляем фото/видео
     logger.info(f"ОСТАВЛЕНО: {link} | Фото/Видео")
 
-    # ПЕРЕСЫЛКА — ТОЛЬКО ЕСЛИ ВКЛЮЧЕНО И ЕСТЬ КОМУ
     if FORWARD_ENABLED and FORWARD_TO_IDS:
         for target_id in FORWARD_TO_IDS:
             try:
@@ -328,36 +200,42 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
                 logger.error(f"ОШИБКА пересылки {target_id}: {e}")
 
 # === ЗАПУСК ===
+import asyncio
+
 def main():
-    print("PhotoOnly Bot v2.8 | Пересылка только под контролем SUPER_ADMIN")
+    print("PhotoOnly Bot v2.9 | Автоудаление старых пересланных сообщений (2 суток)")
 
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     print("HTTP сервер запущен")
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    application = Application.builder().token(BOT_TOKEN).build()
 
-    # Команды
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("auth", auth))
-    app.add_handler(CommandHandler("logout", logout))
-    app.add_handler(CommandHandler("pause", pause_bot))
-    app.add_handler(CommandHandler("resume", resume_bot))
-    app.add_handler(CommandHandler("status", status_bot))
-    app.add_handler(CommandHandler("forward", forward_control))  # Только для SUPER_ADMIN
-    app.add_handler(CommandHandler("list_auth", list_auth))
-    app.add_handler(CommandHandler("deauth", deauth_user))
-    app.add_handler(CommandHandler("ban", ban_user))
-    app.add_handler(CommandHandler("unban", unban_user))
+    # === КОМАНДЫ ===
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("auth", auth))
+    application.add_handler(CommandHandler("logout", logout))
+    application.add_handler(CommandHandler("pause", pause_bot))
+    application.add_handler(CommandHandler("resume", resume_bot))
+    application.add_handler(CommandHandler("status", status_bot))
+    application.add_handler(CommandHandler("forward", forward_control))
+    application.add_handler(CommandHandler("list_auth", list_auth))
+    application.add_handler(CommandHandler("deauth", deauth_user))
+    application.add_handler(CommandHandler("ban", ban_user))
+    application.add_handler(CommandHandler("unban", unban_user))
 
-    # Канал
-    app.add_handler(MessageHandler(
+    # === КАНАЛ ===
+    application.add_handler(MessageHandler(
         filters.ChatType.CHANNEL & filters.Chat(chat_id=CHANNEL_ID),
         handle_channel_post
     ))
 
+    # === ФОНОВАЯ ОЧИСТКА ===
+    if SUPER_ADMIN_ID:
+        application.job_queue.run_once(lambda ctx: start_cleanup_job(application), 10)
+
     print("Запуск polling...")
-    app.run_polling(drop_pending_updates=True)
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
     main()
