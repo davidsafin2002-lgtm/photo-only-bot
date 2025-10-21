@@ -197,7 +197,7 @@ async def status_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def forward_control(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id != SUPER_ADMIN_ID:
-        await update.message.reply_text("Только главный админ может управлять пересылкой!")
+        await update.message.reply_text("Только главный админ может управлять !")
         logger.info(f"Попытка /forward от {user_id}")
         return
 
