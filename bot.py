@@ -194,15 +194,38 @@ async def status_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
 
+# === КОМАНДА /forward — С УВЕДОМЛЕНИЯМИ ===
+last_notify_time = 0  # Глобальная переменная для защиты от спама
+
 async def forward_control(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global last_notify_time
     user_id = update.message.from_user.id
+    username = update.message.from_user.username or "Без юзернейма"
+
+    # === ЕСЛИ НЕ ТЫ — ОТКЛОНЯЕМ + УВЕДОМЛЯЕМ ===
     if user_id != SUPER_ADMIN_ID:
-        await update.message.reply_text("Только главный админ может управлять !")
-        logger.info(f"Попытка /forward от {user_id}")
+        await update.message.reply_text("Только главный админ может управлять пересылкой!")
+
+        # Уведомляем ТЕБЯ (не чаще 1 раза в 10 сек)
+        current_time = time.time()
+        if current_time - last_notify_time > 10:
+            try:
+                await context.bot.send_message(
+                    chat_id=SUPER_ADMIN_ID,
+                    text=f"<b>Попытка использовать /forward</b>\n"
+                         f"Пользователь: @{username} (ID: <code>{user_id}</code>)",
+                    parse_mode="HTML"
+                )
+                last_notify_time = current_time
+            except Exception as e:
+                logger.error(f"Не удалось отправить уведомление: {e}")
+
+        logger.info(f"Попытка /forward от {user_id} (@{username})")
         return
 
+    # === ТОЛЬКО ТЫ МОЖЕШЬ УПРАВЛЯТЬ ===
     if not context.args:
-        await update.message.reply_text("Использование: /forward on или /forward off", parse_mode="Markdown")
+        await update.message.reply_text("Использование: `/forward on` или `/forward off`", parse_mode="Markdown")
         return
 
     arg = context.args[0].lower()
