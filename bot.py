@@ -91,7 +91,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in ADMIN_CHAT_IDS:
         fwd_control = "/forward on/off - Вкл/Выкл пересылку\n" if user_id == SUPER_ADMIN_ID else ""
         await update.message.reply_text(
-            f"<b>PhotoOnly Bot v2.9</b>\n\n"
+            f"<b>PhotoOnly Bot v2.9.1</b>\n\n"
             f"{status}\n"
             f"Пересылка: <b>{fwd_status}</b>\n"
             f"Канал: <code>{CHANNEL_ID}</code>\n\n"
@@ -114,14 +114,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Вы отписались от канала. Авторизация отменена.")
             return
         await update.message.reply_text(
-            f"<b>PhotoOnly Bot v2.9</b>\n\n"
+            f"<b>PhotoOnly Bot v2.9.1</b>\n\n"
             f"{status}\n"
             f"Канал: <code>{CHANNEL_ID}</code>\n\n"
             f"<b>Вы авторизованы!</b>\n"
             f"Команды:\n"
             f"/pause - Приостановить\n"
             f"/resume - Возобновить\n"
-            f"/status - Статус\n",
+            f"/status - Статус\n"
+            f"/logout - Выйти",
             parse_mode="HTML"
         )
     else:
@@ -188,6 +189,7 @@ async def status_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fwd_status = "ВКЛЮЧЕНА" if FORWARD_ENABLED else "ВЫКЛЮЧЕНА"
     await update.message.reply_text(
         f"<b>{status}</b>\n"
+        f"Пересылка: <b>{fwd_status}</b>\n"
         f"Канал: <code>{CHANNEL_ID}</code>\n"
         f"Админы: {len(ADMIN_CHAT_IDS)}\n"
         f"Авторизовано: {len(AUTHORIZED_USERS)}",
@@ -314,37 +316,29 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             except Exception as e:
                 logger.error(f"ОШИБКА пересылки {target_id}: {e}")
 
-# === АВТОУДАЛЕНИЕ СТАРЫХ СООБЩЕНИЙ ===
-async def cleanup_old_messages(application: Application):
-    if not SUPER_ADMIN_ID:
-        return
-    bot = application.bot
-    cutoff_time = datetime.now() - timedelta(hours=48)
-
-    try:
-        async for message in bot.get_chat_history(chat_id=SUPER_ADMIN_ID, limit=1000):
-            if not message.forward_from_chat or message.forward_from_chat.id != CHANNEL_ID:
-                continue
-            if message.date < cutoff_time:
-                try:
-                    await bot.delete_message(chat_id=SUPER_ADMIN_ID, message_id=message.message_id)
-                    logger.info(f"Удалено старое сообщение #{message.message_id}")
-                except Exception as e:
-                    logger.warning(f"Не удалось удалить #{message.message_id}: {e}")
-                await asyncio.sleep(0.1)
-    except Exception as e:
-        logger.error(f"Ошибка очистки: {e}")
-
-def start_cleanup_job(application: Application):
-    async def job():
-        while True:
-            await cleanup_old_messages(application)
-            await asyncio.sleep(6 * 60 * 60)
-    asyncio.create_task(job())
+# === АВТОУДАЛЕНИЕ — БЕЗ JOB_QUEUE ===
+async def cleanup_task(application):
+    while True:
+        if SUPER_ADMIN_ID:
+            try:
+                bot = application.bot
+                cutoff_time = datetime.now() - timedelta(hours=48)
+                async for message in bot.get_chat_history(chat_id=SUPER_ADMIN_ID, limit=1000):
+                    if message.forward_from_chat and message.forward_from_chat.id == CHANNEL_ID:
+                        if message.date < cutoff_time:
+                            try:
+                                await bot.delete_message(chat_id=SUPER_ADMIN_ID, message_id=message.message_id)
+                                logger.info(f"Удалено старое сообщение #{message.message_id}")
+                            except Exception as e:
+                                logger.warning(f"Не удалось удалить #{message.message_id}: {e}")
+                            await asyncio.sleep(0.1)
+            except Exception as e:
+                logger.error(f"Ошибка автоочистки: {e}")
+        await asyncio.sleep(6 * 60 * 60)  # каждые 6 часов
 
 # === ЗАПУСК ===
 def main():
-    print("PhotoOnly Bot v2.9 | Автоудаление старых пересланных сообщений (2 суток)")
+    print("PhotoOnly Bot v2.9.1 | Автоудаление без job_queue")
 
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
@@ -371,9 +365,8 @@ def main():
         handle_channel_post
     ))
 
-    # Автоочистка
-    if SUPER_ADMIN_ID:
-        application.job_queue.run_once(lambda ctx: start_cleanup_job(application), 10)
+    # Запуск автоочистки
+    asyncio.create_task(cleanup_task(application))
 
     print("Запуск polling...")
     application.run_polling(drop_pending_updates=True)
