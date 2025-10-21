@@ -91,7 +91,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in ADMIN_CHAT_IDS:
         fwd_control = "/forward on/off - Вкл/Выкл пересылку\n" if user_id == SUPER_ADMIN_ID else ""
         await update.message.reply_text(
-            f"<b>PhotoOnly Bot v2.9.1</b>\n\n"
+            f"<b>PhotoOnly Bot v2.9.2</b>\n\n"
             f"{status}\n"
             f"Пересылка: <b>{fwd_status}</b>\n"
             f"Канал: <code>{CHANNEL_ID}</code>\n\n"
@@ -114,7 +114,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Вы отписались от канала. Авторизация отменена.")
             return
         await update.message.reply_text(
-            f"<b>PhotoOnly Bot v2.9.1</b>\n\n"
+            f"<b>PhotoOnly Bot v2.9.2</b>\n\n"
             f"{status}\n"
             f"Канал: <code>{CHANNEL_ID}</code>\n\n"
             f"<b>Вы авторизованы!</b>\n"
@@ -316,7 +316,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             except Exception as e:
                 logger.error(f"ОШИБКА пересылки {target_id}: {e}")
 
-# === АВТОУДАЛЕНИЕ — БЕЗ JOB_QUEUE ===
+# === АВТОУДАЛЕНИЕ — ЗАПУСК ПОСЛЕ ПОЛЛИНГА ===
 async def cleanup_task(application):
     while True:
         if SUPER_ADMIN_ID:
@@ -334,11 +334,11 @@ async def cleanup_task(application):
                             await asyncio.sleep(0.1)
             except Exception as e:
                 logger.error(f"Ошибка автоочистки: {e}")
-        await asyncio.sleep(6 * 60 * 60)  # каждые 6 часов
+        await asyncio.sleep(6 * 60 * 60)
 
 # === ЗАПУСК ===
 def main():
-    print("PhotoOnly Bot v2.9.1 | Автоудаление без job_queue")
+    print("PhotoOnly Bot v2.9.2 | Финальная версия — без job_queue и ошибок")
 
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
@@ -365,8 +365,11 @@ def main():
         handle_channel_post
     ))
 
-    # Запуск автоочистки
-    asyncio.create_task(cleanup_task(application))
+    # === ЗАПУСК АВТООЧИСТКИ ПОСЛЕ ПОЛЛИНГА ===
+    async def post_init(application: Application):
+        asyncio.create_task(cleanup_task(application))
+
+    application.post_init = post_init
 
     print("Запуск polling...")
     application.run_polling(drop_pending_updates=True)
