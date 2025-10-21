@@ -8,20 +8,21 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.error import TelegramError
 
-# Загрузка .env
+# === ЗАГРУЗКА ПЕРЕМЕННЫХ ===
 load_dotenv()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHANNEL_ID = int(os.getenv('CHANNEL_ID', '-1001805328200'))
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'TAVDIN')
 ADMIN_CHAT_IDS = [int(x) for x in os.getenv('ADMIN_CHAT_IDS', '').split(',') if x]
-MAIN_ADMIN_ID = int(os.getenv('MAIN_ADMIN_ID', '0'))
+SUPER_ADMIN_ID = int(os.getenv('SUPER_ADMIN_ID', '0'))  # Только ты можешь управлять пересылкой
+FORWARD_TO_IDS = [int(x) for x in os.getenv('FORWARD_TO_IDS', '').split(',') if x]  # Кому пересылать
 
-# Глобальные переменные
+# === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 PAUSE_MODE = False
 FORWARD_ENABLED = True  # По умолчанию включено
 
-# Логирование
+# === ЛОГИРОВАНИЕ ===
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -37,23 +38,24 @@ if not BOT_TOKEN or len(BOT_TOKEN) < 30:
 print(f"Токен: {len(BOT_TOKEN)} символов")
 print(f"Канал: {CHANNEL_ID}")
 print(f"Админы: {ADMIN_CHAT_IDS}")
-print(f"Пересылка: {'ВКЛ' if FORWARD_ENABLED else 'ВЫКЛ'} (MAIN_ADMIN_ID={MAIN_ADMIN_ID})")
+print(f"Главный админ: {SUPER_ADMIN_ID}")
+print(f"Пересылка: {'ВКЛ' if FORWARD_ENABLED else 'ВЫКЛ'} → {FORWARD_TO_IDS or 'не указаны'}")
 
-# Flask (UptimeRobot)
+# === FLASK ДЛЯ UPTIMEROBOT ===
 app = Flask(__name__)
 @app.route('/')
 def health_check():
-    return {"status": "ok", "bot": "running", "admins": len(ADMIN_CHAT_IDS), "forward": FORWARD_ENABLED, "timestamp": time.time()}
+    return {"status": "ok", "bot": "running", "forward": FORWARD_ENABLED, "timestamp": time.time()}
 
 def run_flask():
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
 
-# Хранилища
+# === ХРАНИЛИЩА ===
 AUTHORIZED_USERS = {}
 BANNED_USERS = set()
 
-# Проверка подписки
+# === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 async def is_user_member(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
         member = await context.bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
@@ -62,12 +64,10 @@ async def is_user_member(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bo
         logger.warning(f"Ошибка проверки подписки {user_id}: {e}")
         return False
 
-# Ссылка на сообщение
 def get_message_link(chat_id: int, message_id: int) -> str:
     clean_id = str(chat_id)[4:]
     return f"https://t.me/c/{clean_id}/{message_id}"
 
-# Проверка доступа
 async def check_access(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     if user_id in BANNED_USERS:
         return False
@@ -92,8 +92,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fwd_status = "ВКЛЮЧЕНА" if FORWARD_ENABLED else "ВЫКЛЮЧЕНА"
 
     if user_id in ADMIN_CHAT_IDS:
+        fwd_control = ""
+        if user_id == SUPER_ADMIN_ID:
+            fwd_control = f"/forward on/off - Вкл/Выкл пересылку\n"
+
         await update.message.reply_text(
-            f"<b>PhotoOnly Bot v2.7</b>\n\n"
+            f"<b>PhotoOnly Bot v2.8</b>\n\n"
             f"{status}\n"
             f"Пересылка: <b>{fwd_status}</b>\n"
             f"Канал: <code>{CHANNEL_ID}</code>\n\n"
@@ -107,7 +111,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"/deauth &lt;ID&gt; - Деавторизовать\n"
             f"/ban &lt;ID&gt; - Заблокировать\n"
             f"/unban &lt;ID&gt; - Разблокировать\n"
-            f"/forward on/off - Вкл/Выкл пересылку",
+            f"{fwd_control}",
             parse_mode="HTML"
         )
     elif user_id in AUTHORIZED_USERS:
@@ -116,7 +120,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Вы отписались от канала. Авторизация отменена.")
             return
         await update.message.reply_text(
-            f"<b>PhotoOnly Bot v2.7</b>\n\n"
+            f"<b>PhotoOnly Bot v2.8</b>\n\n"
             f"{status}\n"
             f"Канал: <code>{CHANNEL_ID}</code>\n\n"
             f"<b>Вы авторизованы!</b>\n"
@@ -198,11 +202,12 @@ async def status_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
 
-# === КОМАНДА УПРАВЛЕНИЯ ПЕРЕСЫЛКОЙ ===
+# === КОМАНДА УПРАВЛЕНИЯ ПЕРЕСЫЛКОЙ — ТОЛЬКО ДЛЯ SUPER_ADMIN ===
 async def forward_control(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    if user_id not in ADMIN_CHAT_IDS:
-        await update.message.reply_text("Только админы!")
+    if user_id != SUPER_ADMIN_ID:
+        await update.message.reply_text("Только главный админ может управлять пересылкой!")
+        logger.info(f"Попытка /forward от {user_id} (не главный админ)")
         return
 
     if not context.args:
@@ -215,13 +220,13 @@ async def forward_control(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if arg == "on":
         FORWARD_ENABLED = True
         await update.message.reply_text("Пересылка <b>ВКЛЮЧЕНА</b>", parse_mode="HTML")
-        logger.info(f"Пересылка ВКЛЮЧЕНА админом {user_id}")
+        logger.info(f"Пересылка ВКЛЮЧЕНА главным админом {user_id}")
     elif arg == "off":
         FORWARD_ENABLED = False
         await update.message.reply_text("Пересылка <b>ВЫКЛЮЧЕНА</b>", parse_mode="HTML")
-        logger.info(f"Пересылка ВЫКЛЮЧЕНА админом {user_id}")
+        logger.info(f"Пересылка ВЫКЛЮЧЕНА главным админом {user_id}")
     else:
-        await update.message.reply_text("Неверная команда. Используйте: `on` или `off`", parse_mode="Markdown")
+        await update.message.reply_text("Используйте: `on` или `off`", parse_mode="Markdown")
 
 # === АДМИНСКИЕ КОМАНДЫ ===
 async def list_auth(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -309,21 +314,22 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Оставляем фото/видео
     logger.info(f"ОСТАВЛЕНО: {link} | Фото/Видео")
 
-    # ПЕРЕСЫЛКА — ТОЛЬКО ЕСЛИ ВКЛЮЧЕНО
-    if FORWARD_ENABLED and MAIN_ADMIN_ID and MAIN_ADMIN_ID != 0:
-        try:
-            await context.bot.forward_message(
-                chat_id=MAIN_ADMIN_ID,
-                from_chat_id=CHANNEL_ID,
-                message_id=msg_id
-            )
-            logger.info(f"ПЕРЕСЛАНО админу {MAIN_ADMIN_ID}: {link}")
-        except Exception as e:
-            logger.error(f"ОШИБКА пересылки {MAIN_ADMIN_ID}: {e}")
+    # ПЕРЕСЫЛКА — ТОЛЬКО ЕСЛИ ВКЛЮЧЕНО И ЕСТЬ КОМУ
+    if FORWARD_ENABLED and FORWARD_TO_IDS:
+        for target_id in FORWARD_TO_IDS:
+            try:
+                await context.bot.forward_message(
+                    chat_id=target_id,
+                    from_chat_id=CHANNEL_ID,
+                    message_id=msg_id
+                )
+                logger.info(f"ПЕРЕСЛАНО {target_id}: {link}")
+            except Exception as e:
+                logger.error(f"ОШИБКА пересылки {target_id}: {e}")
 
 # === ЗАПУСК ===
 def main():
-    print("PhotoOnly Bot v2.7 | Пересылка с /forward on/off")
+    print("PhotoOnly Bot v2.8 | Пересылка только под контролем SUPER_ADMIN")
 
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
@@ -338,7 +344,7 @@ def main():
     app.add_handler(CommandHandler("pause", pause_bot))
     app.add_handler(CommandHandler("resume", resume_bot))
     app.add_handler(CommandHandler("status", status_bot))
-    app.add_handler(CommandHandler("forward", forward_control))  # НОВАЯ КОМАНДА
+    app.add_handler(CommandHandler("forward", forward_control))  # Только для SUPER_ADMIN
     app.add_handler(CommandHandler("list_auth", list_auth))
     app.add_handler(CommandHandler("deauth", deauth_user))
     app.add_handler(CommandHandler("ban", ban_user))
