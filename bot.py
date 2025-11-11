@@ -51,21 +51,18 @@ async def check_access(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool
 
 # === КНОПКИ ===
 def main_menu(user_id: int):
-    pause_text = "ПАУЗА" if not PAUSE_MODE else "ПАУЗА"
-    resume_text = "АКТИВЕН" if PAUSE_MODE else "АКТИВЕН"
-
     keyboard = [
         [
-            InlineKeyboardButton(f"{pause_text}", callback_data="pause"),
-            InlineKeyboardButton(f"{resume_text}", callback_data="resume")
+            InlineKeyboardButton("ПАУЗА", callback_data="pause"),
+            InlineKeyboardButton("АКТИВЕН", callback_data="resume")
         ],
         [InlineKeyboardButton("Статус", callback_data="status"),
          InlineKeyboardButton("Выйти", callback_data="logout")]
     ]
 
     if user_id == SUPER_ADMIN_ID:
-        fwd_status = "ПЕРЕСЫЛКА ВКЛ" if FORWARD_ENABLED else "ПЕРЕСЫЛКА ВЫКЛ"
-        keyboard.insert(2, [InlineKeyboardButton(f"{fwd_status}", callback_data="toggle_forward")])
+        fwd_text = "ПЕРЕСЫЛКА ВКЛ" if FORWARD_ENABLED else "ПЕРЕСЫЛКА ВЫКЛ"
+        keyboard.insert(2, [InlineKeyboardButton(f"{fwd_text}", callback_data="toggle_forward")])
 
     if user_id in ADMIN_CHAT_IDS:
         keyboard.append([InlineKeyboardButton("Админ-панель", callback_data="admin_panel")])
@@ -81,11 +78,10 @@ def admin_panel():
         [InlineKeyboardButton("Назад", callback_data="back_main")]
     ])
 
-# === ТЕКСТ МЕНЮ ===
 def get_main_text():
     status = "ПАУЗА" if PAUSE_MODE else "АКТИВЕН"
     return (
-        f"<b>PhotoOnly Bot v3.8</b>\n\n"
+        f"<b>PhotoOnly Bot v3.9</b>\n\n"
         f"Статус: <b>{status}</b>\n"
         f"Канал: <code>{CHANNEL_ID}</code>\n\n"
         f"Управляйте кнопками ниже:"
@@ -100,7 +96,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in AUTHORIZED_USERS and user_id not in ADMIN_CHAT_IDS:
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Ввести пароль", callback_data="auth_prompt")]])
         await update.message.reply_text(
-            "<b>PhotoOnly Bot v3.8</b>\n\n"
+            "<b>PhotoOnly Bot v3.9</b>\n\n"
             "Для доступа нужен пароль.\n"
             "Нажмите кнопку ниже:",
             parse_mode="HTML",
@@ -121,6 +117,7 @@ async def auth_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("Введите пароль:\n`/auth ваш_пароль`", parse_mode="Markdown")
     context.user_data["awaiting_auth"] = True
 
+# === ОБРАБОТКА ТЕКСТА (авторизация + ID) ===
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     text = update.message.text.strip()
@@ -138,7 +135,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["awaiting_auth"] = False
             return
 
-    # Обработка ID для админских действий
+    # Ввод ID для админских действий
     expected = context.user_data.get("expecting_id")
     if not expected: return
 
@@ -193,8 +190,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if data in ["pause", "resume"]:
-            if data == "pause" and PAUSE_MODE: return
-            if data == "resume" and not PAUSE_MODE: return
+            if (data == "pause" and PAUSE_MODE) or (data == "resume" and not PAUSE_MODE):
+                return
             PAUSE_MODE = data == "pause"
             await query.edit_message_text(get_main_text(), parse_mode="HTML", reply_markup=main_menu(user_id))
 
@@ -235,7 +232,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == "auth_prompt":
             await auth_prompt(update, context)
 
-        # === АДМИНСКИЕ ДЕЙСТВИЯ С ВВОДОМ ID ===
+        # Админские действия
         elif data in ["deauth_start", "ban_start", "unban_start"] and user_id in ADMIN_CHAT_IDS:
             action = {"deauth_start": "deauth", "ban_start": "ban", "unban_start": "unban"}[data]
             action_text = {"deauth": "Деавторизовать", "ban": "Забанить", "unban": "Разбанить"}[action]
@@ -251,7 +248,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             logger.error(f"Ошибка: {e}")
 
-# === КАНАЛ + АВТОУДАЛЕНИЕ ===
+# === КАНАЛ ===
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     post = update.channel_post
     if not post or post.chat_id != CHANNEL_ID: return
@@ -264,6 +261,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             try: await post.forward(uid)
             except: pass
 
+# === АВТОУДАЛЕНИЕ + АНТИ-СОН ===
 async def cleanup_task(app):
     while True:
         await asyncio.sleep(6 * 3600)
@@ -277,8 +275,18 @@ async def cleanup_task(app):
                         await asyncio.sleep(0.1)
             except: pass
 
+async def keep_alive():
+    while True:
+        await asyncio.sleep(300)  # каждые 5 минут
+        try:
+            await application.bot.get_me()
+            print("keep_alive пинг — бот жив! (Render не спит)")
+        except:
+            pass
+
 async def post_init(app):
     asyncio.create_task(cleanup_task(app))
+    asyncio.create_task(keep_alive())  # АНТИ-СОН ДЛЯ RENDER FREE
 
 # === ЗАПУСК ===
 application = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
@@ -289,7 +297,7 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_t
 application.add_handler(MessageHandler(filters.ChatType.CHANNEL & filters.Chat(CHANNEL_ID), handle_channel_post))
 
 webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{BOT_TOKEN}"
-print(f"PhotoOnly Bot v3.8 | ОДНО СООБЩЕНИЕ + БАН/РАЗБАН + ЦВЕТА")
+print(f"PhotoOnly Bot v3.9 | 100% НЕ СПИТ | NL 2025")
 print(f"Webhook: {webhook_url}")
 
 application.run_webhook(
