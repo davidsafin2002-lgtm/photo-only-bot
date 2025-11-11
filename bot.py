@@ -51,26 +51,21 @@ async def check_access(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool
 
 # === КНОПКИ ===
 def main_menu(user_id: int):
-    pause_btn = InlineKeyboardButton("ПАУЗА", callback_data="pause")
-    resume_btn = InlineKeyboardButton("АКТИВЕН", callback_data="resume")
-    
-    if PAUSE_MODE:
-        pause_btn = InlineKeyboardButton("ПАУЗА", callback_data="none")
-        resume_btn = InlineKeyboardButton("АКТИВЕН", callback_data="resume")
-    else:
-        pause_btn = InlineKeyboardButton("ПАУЗА", callback_data="pause")
-        resume_btn = InlineKeyboardButton("АКТИВЕН", callback_data="none")
+    pause_text = "ПАУЗА" if not PAUSE_MODE else "ПАУЗА"
+    resume_text = "АКТИВЕН" if PAUSE_MODE else "АКТИВЕН"
 
     keyboard = [
-        [pause_btn, resume_btn],
+        [
+            InlineKeyboardButton(f"{pause_text}", callback_data="pause"),
+            InlineKeyboardButton(f"{resume_text}", callback_data="resume")
+        ],
         [InlineKeyboardButton("Статус", callback_data="status"),
          InlineKeyboardButton("Выйти", callback_data="logout")]
     ]
 
     if user_id == SUPER_ADMIN_ID:
-        fwd_text = "ПЕРЕСЫЛКА ВКЛ" if FORWARD_ENABLED else "ПЕРЕСЫЛКА ВЫКЛ"
-        fwd_emoji = "ON" if FORWARD_ENABLED else "OFF"
-        keyboard.insert(2, [InlineKeyboardButton(f"{fwd_emoji} {fwd_text}", callback_data="toggle_forward")])
+        fwd_status = "ПЕРЕСЫЛКА ВКЛ" if FORWARD_ENABLED else "ПЕРЕСЫЛКА ВЫКЛ"
+        keyboard.insert(2, [InlineKeyboardButton(f"{fwd_status}", callback_data="toggle_forward")])
 
     if user_id in ADMIN_CHAT_IDS:
         keyboard.append([InlineKeyboardButton("Админ-панель", callback_data="admin_panel")])
@@ -80,13 +75,23 @@ def main_menu(user_id: int):
 def admin_panel():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Список авторизованных", callback_data="list_auth")],
-        [InlineKeyboardButton("Деавторизовать", callback_data="deauth_prompt")],
-        [InlineKeyboardButton("Забанить", callback_data="ban_prompt")],
-        [InlineKeyboardButton("Разбанить", callback_data="unban_prompt")],
+        [InlineKeyboardButton("Деавторизовать", callback_data="deauth_start")],
+        [InlineKeyboardButton("Забанить", callback_data="ban_start")],
+        [InlineKeyboardButton("Разбанить", callback_data="unban_start")],
         [InlineKeyboardButton("Назад", callback_data="back_main")]
     ])
 
-# === /start — ОДНО СООБЩЕНИЕ НАВСЕГДА ===
+# === ТЕКСТ МЕНЮ ===
+def get_main_text():
+    status = "ПАУЗА" if PAUSE_MODE else "АКТИВЕН"
+    return (
+        f"<b>PhotoOnly Bot v3.8</b>\n\n"
+        f"Статус: <b>{status}</b>\n"
+        f"Канал: <code>{CHANNEL_ID}</code>\n\n"
+        f"Управляйте кнопками ниже:"
+    )
+
+# === /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id in BANNED_USERS:
@@ -95,7 +100,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in AUTHORIZED_USERS and user_id not in ADMIN_CHAT_IDS:
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Ввести пароль", callback_data="auth_prompt")]])
         await update.message.reply_text(
-            "<b>PhotoOnly Bot v3.7</b>\n\n"
+            "<b>PhotoOnly Bot v3.8</b>\n\n"
             "Для доступа нужен пароль.\n"
             "Нажмите кнопку ниже:",
             parse_mode="HTML",
@@ -103,15 +108,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    status = "ПАУЗА" if PAUSE_MODE else "АКТИВЕН"
-    text = (
-        f"<b>PhotoOnly Bot v3.7</b>\n\n"
-        f"Статус: <b>{status}</b>\n"
-        f"Канал: <code>{CHANNEL_ID}</code>\n\n"
-        f"Управляйте кнопками:"
-    )
     await update.message.reply_text(
-        text,
+        get_main_text(),
         parse_mode="HTML",
         reply_markup=main_menu(user_id)
     )
@@ -120,31 +118,72 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def auth_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("Введите пароль в чат:\n`/auth ваш_пароль`", parse_mode="Markdown")
+    await query.edit_message_text("Введите пароль:\n`/auth ваш_пароль`", parse_mode="Markdown")
     context.user_data["awaiting_auth"] = True
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.user_data.get("awaiting_auth"): return
+    user_id = update.message.from_user.id
     text = update.message.text.strip()
-    if text.lower().startswith("/auth "):
-        password = text[6:].strip()
-        if password == ADMIN_PASSWORD:
-            AUTHORIZED_USERS[update.message.from_user.id] = True
-            await update.message.reply_text("Авторизация успешна!")
-            await start(update, context)
-        else:
-            await update.message.reply_text("Неверный пароль.")
-        context.user_data["awaiting_auth"] = False
 
-# === КНОПКИ — ВСЁ РЕДАКТИРУЕТ ОДНО СООБЩЕНИЕ ===
+    # Авторизация
+    if context.user_data.get("awaiting_auth"):
+        if text.lower().startswith("/auth "):
+            password = text[6:].strip()
+            if password == ADMIN_PASSWORD:
+                AUTHORIZED_USERS[user_id] = True
+                await update.message.reply_text("Авторизация успешна!")
+                await start(update, context)
+            else:
+                await update.message.reply_text("Неверный пароль.")
+            context.user_data["awaiting_auth"] = False
+            return
+
+    # Обработка ID для админских действий
+    expected = context.user_data.get("expecting_id")
+    if not expected: return
+
+    try:
+        target_id = int(text)
+    except ValueError:
+        await update.message.reply_text("Ошибка: введите только цифры ID.")
+        return
+
+    action = expected["action"]
+    msg = expected["message"]
+
+    if action == "deauth":
+        if target_id in AUTHORIZED_USERS:
+            del AUTHORIZED_USERS[target_id]
+            result = f"Деавторизован {target_id}"
+        else:
+            result = f"ID {target_id} не авторизован"
+
+    elif action == "ban":
+        if target_id in ADMIN_CHAT_IDS:
+            result = "Нельзя забанить админа!"
+        else:
+            BANNED_USERS.add(target_id)
+            result = f"Заблокирован {target_id}"
+
+    elif action == "unban":
+        BANNED_USERS.discard(target_id)
+        result = f"Разблокирован {target_id}"
+
+    await context.bot.edit_message_text(
+        chat_id=msg.chat_id,
+        message_id=msg.message_id,
+        text=f"{result}\n\n{get_main_text()}",
+        parse_mode="HTML",
+        reply_markup=main_menu(user_id)
+    )
+    context.user_data.clear()
+
+# === КНОПКИ ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
     data = query.data
-
-    if data == "none":
-        return
 
     if not await check_access(user_id, context):
         await query.edit_message_text("Доступ запрещён.")
@@ -153,48 +192,37 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global PAUSE_MODE, FORWARD_ENABLED
 
     try:
-        status_text = "ПАУЗА" if PAUSE_MODE else "АКТИВЕН"
-        base_text = (
-            f"<b>PhotoOnly Bot v3.7</b>\n\n"
-            f"Статус: <b>{status_text}</b>\n"
-            f"Канал: <code>{CHANNEL_ID}</code>\n\n"
-            f"Управляйте кнопками:"
-        )
-
-        if data == "pause":
-            if PAUSE_MODE: return
-            PAUSE_MODE = True
-            await query.edit_message_text(base_text, parse_mode="HTML", reply_markup=main_menu(user_id))
-
-        elif data == "resume":
-            if not PAUSE_MODE: return
-            PAUSE_MODE = False
-            await query.edit_message_text(base_text, parse_mode="HTML", reply_markup=main_menu(user_id))
+        if data in ["pause", "resume"]:
+            if data == "pause" and PAUSE_MODE: return
+            if data == "resume" and not PAUSE_MODE: return
+            PAUSE_MODE = data == "pause"
+            await query.edit_message_text(get_main_text(), parse_mode="HTML", reply_markup=main_menu(user_id))
 
         elif data == "status":
             fwd = "ВКЛЮЧЕНА" if FORWARD_ENABLED else "ВЫКЛЮЧЕНА"
             status_msg = (
                 f"<b>Статус:</b> {'ПАУЗА' if PAUSE_MODE else 'АКТИВЕН'}\n"
                 f"<b>Пересылка:</b> {fwd}\n"
-                f"<b>Авторизовано:</b> {len(AUTHORIZED_USERS)}\n\n"
-                f"<i>Нажмите любую кнопку для возврата</i>"
+                f"<b>Авторизовано:</b> {len(AUTHORIZED_USERS)}\n"
+                f"<b>Забанено:</b> {len(BANNED_USERS)}\n\n"
+                f"Нажмите любую кнопку для возврата"
             )
             await query.edit_message_text(status_msg, parse_mode="HTML", reply_markup=main_menu(user_id))
 
         elif data == "logout":
             if user_id in AUTHORIZED_USERS:
                 del AUTHORIZED_USERS[user_id]
-            await query.edit_message_text("Вы вышли.\nНапишите /start для входа.")
+            await query.edit_message_text("Вы вышли.\n/start — войти снова")
 
         elif data == "toggle_forward" and user_id == SUPER_ADMIN_ID:
             FORWARD_ENABLED = not FORWARD_ENABLED
-            await query.edit_message_text(base_text, parse_mode="HTML", reply_markup=main_menu(user_id))
+            await query.edit_message_text(get_main_text(), parse_mode="HTML", reply_markup=main_menu(user_id))
 
         elif data == "admin_panel" and user_id in ADMIN_CHAT_IDS:
             await query.edit_message_text("Админ-панель", reply_markup=admin_panel())
 
         elif data == "back_main":
-            await query.edit_message_text(base_text, parse_mode="HTML", reply_markup=main_menu(user_id))
+            await query.edit_message_text(get_main_text(), parse_mode="HTML", reply_markup=main_menu(user_id))
 
         elif data == "list_auth" and user_id in ADMIN_CHAT_IDS:
             users = "\n".join([f"• {uid}" for uid in AUTHORIZED_USERS.keys()]) if AUTHORIZED_USERS else "Пусто"
@@ -207,11 +235,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == "auth_prompt":
             await auth_prompt(update, context)
 
+        # === АДМИНСКИЕ ДЕЙСТВИЯ С ВВОДОМ ID ===
+        elif data in ["deauth_start", "ban_start", "unban_start"] and user_id in ADMIN_CHAT_IDS:
+            action = {"deauth_start": "deauth", "ban_start": "ban", "unban_start": "unban"}[data]
+            action_text = {"deauth": "Деавторизовать", "ban": "Забанить", "unban": "Разбанить"}[action]
+            await query.edit_message_text(f"{action_text} пользователя:\n\nНапишите ID:")
+            context.user_data["expecting_id"] = {
+                "action": action,
+                "message": query.message
+            }
+
     except BadRequest as e:
         if "Message is not modified" in str(e):
             pass
         else:
-            logger.error(f"Ошибка кнопки: {e}")
+            logger.error(f"Ошибка: {e}")
 
 # === КАНАЛ + АВТОУДАЛЕНИЕ ===
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -251,7 +289,7 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_t
 application.add_handler(MessageHandler(filters.ChatType.CHANNEL & filters.Chat(CHANNEL_ID), handle_channel_post))
 
 webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{BOT_TOKEN}"
-print(f"PhotoOnly Bot v3.7 | ОДНО СООБЩЕНИЕ + КНОПКИ")
+print(f"PhotoOnly Bot v3.8 | ОДНО СООБЩЕНИЕ + БАН/РАЗБАН + ЦВЕТА")
 print(f"Webhook: {webhook_url}")
 
 application.run_webhook(
