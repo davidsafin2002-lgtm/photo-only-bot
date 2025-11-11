@@ -1,7 +1,8 @@
 import os
 import logging
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -31,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 AUTHORIZED_USERS = {}
 BANNED_USERS = set()
+
+AMSTERDAM_TZ = ZoneInfo("Europe/Amsterdam")
 
 # === ВСПОМОГАТЕЛЬНЫЕ ===
 async def is_user_member(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -81,7 +84,7 @@ def admin_panel():
 def get_main_text():
     status = "ПАУЗА" if PAUSE_MODE else "АКТИВЕН"
     return (
-        f"<b>PhotoOnly Bot v3.9</b>\n\n"
+        f"<b>PhotoOnly Bot v3.9+</b>\n\n"
         f"Статус: <b>{status}</b>\n"
         f"Канал: <code>{CHANNEL_ID}</code>\n\n"
         f"Управляйте кнопками ниже:"
@@ -96,7 +99,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in AUTHORIZED_USERS and user_id not in ADMIN_CHAT_IDS:
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Ввести пароль", callback_data="auth_prompt")]])
         await update.message.reply_text(
-            "<b>PhotoOnly Bot v3.9</b>\n\n"
+            "<b>PhotoOnly Bot v3.9+</b>\n\n"
             "Для доступа нужен пароль.\n"
             "Нажмите кнопку ниже:",
             parse_mode="HTML",
@@ -117,12 +120,11 @@ async def auth_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("Введите пароль:\n`/auth ваш_пароль`", parse_mode="Markdown")
     context.user_data["awaiting_auth"] = True
 
-# === ОБРАБОТКА ТЕКСТА (авторизация + ID) ===
+# === ОБРАБОТКА ТЕКСТА ===
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     text = update.message.text.strip()
 
-    # Авторизация
     if context.user_data.get("awaiting_auth"):
         if text.lower().startswith("/auth "):
             password = text[6:].strip()
@@ -135,7 +137,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["awaiting_auth"] = False
             return
 
-    # Ввод ID для админских действий
     expected = context.user_data.get("expecting_id")
     if not expected: return
 
@@ -232,7 +233,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == "auth_prompt":
             await auth_prompt(update, context)
 
-        # Админские действия
         elif data in ["deauth_start", "ban_start", "unban_start"] and user_id in ADMIN_CHAT_IDS:
             action = {"deauth_start": "deauth", "ban_start": "ban", "unban_start": "unban"}[data]
             action_text = {"deauth": "Деавторизовать", "ban": "Забанить", "unban": "Разбанить"}[action]
@@ -261,7 +261,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             try: await post.forward(uid)
             except: pass
 
-# === АВТОУДАЛЕНИЕ + АНТИ-СОН ===
+# === АВТОУДАЛЕНИЕ + АНТИ-СОН + ЕЖЕДНЕВНОЕ УВЕДОМЛЕНИЕ ===
 async def cleanup_task(app):
     while True:
         await asyncio.sleep(6 * 3600)
@@ -277,16 +277,47 @@ async def cleanup_task(app):
 
 async def keep_alive():
     while True:
-        await asyncio.sleep(300)  # каждые 5 минут
+        await asyncio.sleep(300)
         try:
             await application.bot.get_me()
             print("keep_alive пинг — бот жив! (Render не спит)")
         except:
             pass
 
+async def daily_report(app):
+    while True:
+        now = datetime.now(AMSTERDAM_TZ)
+        # Ждём 09:00 по Амстердаму
+        next_run = datetime.combine(now.date(), time(9, 0), tzinfo=AMSTERDAM_TZ)
+        if now.hour >= 9:
+            next_run += timedelta(days=1)
+        seconds_until = (next_run - now).total_seconds()
+        await asyncio.sleep(seconds_until)
+
+        try:
+            status = "ПАУЗА" if PAUSE_MODE else "АКТИВЕН"
+            fwd = "ВКЛЮЧЕНА" if FORWARD_ENABLED else "ВЫКЛЮЧЕНА"
+            await app.bot.send_message(
+                chat_id=SUPER_ADMIN_ID,
+                text=(
+                    f"<b>Бот жив! Ежедневный отчёт</b>\n\n"
+                    f"Дата: {now.strftime('%d.%m.%Y %H:%M')} (NL)\n"
+                    f"Статус: <b>{status}</b>\n"
+                    f"Пересылка: <b>{fwd}</b>\n"
+                    f"Авторизовано: {len(AUTHORIZED_USERS)}\n"
+                    f"Забанено: {len(BANNED_USERS)}\n\n"
+                    f"Render Free — 100% работает 24/7"
+                ),
+                parse_mode="HTML"
+            )
+            print(f"Ежедневное уведомление отправлено в {now.strftime('%H:%M')} NL")
+        except Exception as e:
+            logger.error(f"Не удалось отправить отчёт: {e}")
+
 async def post_init(app):
     asyncio.create_task(cleanup_task(app))
-    asyncio.create_task(keep_alive())  # АНТИ-СОН ДЛЯ RENDER FREE
+    asyncio.create_task(keep_alive())
+    asyncio.create_task(daily_report(app))  # ЕЖЕДНЕВНОЕ УВЕДОМЛЕНИЕ
 
 # === ЗАПУСК ===
 application = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
@@ -297,7 +328,7 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_t
 application.add_handler(MessageHandler(filters.ChatType.CHANNEL & filters.Chat(CHANNEL_ID), handle_channel_post))
 
 webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{BOT_TOKEN}"
-print(f"PhotoOnly Bot v3.9 | 100% НЕ СПИТ | NL 2025")
+print(f"PhotoOnly Bot v3.9+ | УВЕДОМЛЕНИЕ КАЖДЫЕ 24ч | NL 2025")
 print(f"Webhook: {webhook_url}")
 
 application.run_webhook(
