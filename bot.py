@@ -4,7 +4,14 @@ import asyncio
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,      # <-- ДОБАВЛЕНО
+    filters,
+    ContextTypes
+)
 from telegram.error import TelegramError
 
 load_dotenv()
@@ -45,25 +52,25 @@ async def check_access(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool
 # === КНОПКИ ===
 def main_menu(user_id: int):
     keyboard = [
-        [InlineKeyboardButton("Пауза ⏸", callback_data="pause"),
-         InlineKeyboardButton("Активен ▶", callback_data="resume")],
-        [InlineKeyboardButton("Статус ℹ", callback_data="status"),
-         InlineKeyboardButton("Выйти 🚪", callback_data="logout")]
+        [InlineKeyboardButton("Пауза", callback_data="pause"),
+         InlineKeyboardButton("Активен", callback_data="resume")],
+        [InlineKeyboardButton("Статус", callback_data="status"),
+         InlineKeyboardButton("Выйти", callback_data="logout")]
     ]
     if user_id == SUPER_ADMIN_ID:
-        fwd_text = "Пересылка ВЫКЛ 🔴" if FORWARD_ENABLED else "Пересылка ВКЛ 🟢"
+        fwd_text = "Пересылка ВЫКЛ" if FORWARD_ENABLED else "Пересылка ВКЛ"
         keyboard.insert(2, [InlineKeyboardButton(fwd_text, callback_data="toggle_forward")])
     if user_id in ADMIN_CHAT_IDS:
-        keyboard.append([InlineKeyboardButton("Админ-панель ⚙", callback_data="admin_panel")])
+        keyboard.append([InlineKeyboardButton("Админ-панель", callback_data="admin_panel")])
     return InlineKeyboardMarkup(keyboard)
 
 def admin_panel():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Список авторизованных 👥", callback_data="list_auth")],
-        [InlineKeyboardButton("Деавторизовать ❌", callback_data="deauth_prompt")],
-        [InlineKeyboardButton("Забанить 🚫", callback_data="ban_prompt")],
-        [InlineKeyboardButton("Разбанить ✅", callback_data="unban_prompt")],
-        [InlineKeyboardButton("Назад ↩", callback_data="back_main")]
+        [InlineKeyboardButton("Список авторизованных", callback_data="list_auth")],
+        [InlineKeyboardButton("Деавторизовать", callback_data="deauth_prompt")],
+        [InlineKeyboardButton("Забанить", callback_data="ban_prompt")],
+        [InlineKeyboardButton("Разбанить", callback_data="unban_prompt")],
+        [InlineKeyboardButton("Назад", callback_data="back_main")]
     ])
 
 # === /start ===
@@ -80,12 +87,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"<b>PhotoOnly Bot v3.5</b>\n\n"
         f"Статус: <b>{status}</b>\n"
         f"Канал: <code>{CHANNEL_ID}</code>\n\n"
-        f"Управляйте кнопками ниже 👇",
+        f"Управляйте кнопками ниже",
         parse_mode="HTML",
         reply_markup=main_menu(user_id)
     )
 
-# === ОБРАБОТКА КНОПОК ===
+# === КНОПКИ ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -127,18 +134,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(f"Пересылка {'ВКЛЮЧЕНА' if FORWARD_ENABLED else 'ВЫКЛЮЧЕНА'}")
 
     elif data == "admin_panel" and user_id in ADMIN_CHAT_IDS:
-        await query.edit_message_text("Админ-панель ⚙", reply_markup=admin_panel())
+        await query.edit_message_text("Админ-панель", reply_markup=admin_panel())
 
-    elif data == "back_main" and user_id in ADMIN_CHAT_IDS:
+    elif data == "back_main":
         await query.edit_message_text("Главное меню", reply_markup=main_menu(user_id))
 
     elif data == "list_auth" and user_id in ADMIN_CHAT_IDS:
         users = "\n".join([f"• {uid}" for uid in AUTHORIZED_USERS.keys()]) if AUTHORIZED_USERS else "Пусто"
         await query.message.reply_text(f"<b>Авторизованные:</b>\n{users}", parse_mode="HTML")
 
-    # Здесь можно добавить обработку deauth/ban/unban с вводом ID (через conversation или force_reply)
-
-# === КАНАЛ + АВТОУДАЛЕНИЕ (как раньше) ===
+# === КАНАЛ ===
 async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     post = update.channel_post
     if not post or post.chat_id != CHANNEL_ID: return
@@ -151,6 +156,7 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
             try: await post.forward(uid)
             except: pass
 
+# === АВТОУДАЛЕНИЕ ===
 async def cleanup_task(app):
     while True:
         await asyncio.sleep(6 * 3600)
