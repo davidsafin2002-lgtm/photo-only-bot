@@ -81,7 +81,7 @@ def admin_panel():
 
 def get_main_text():
     status = "ПАУЗА" if PAUSE_MODE else "АКТИВЕН"
-    return f"<b>PhotoOnly Bot v5.0 UZ</b>\n\nСтатус: <b>{status}</b>\nКанал: <code>{CHANNEL_ID}</code>\n\nУправляйте кнопками:"
+    return f"<b>PhotoOnly Bot v5.0 </b>\n\nСтатус: <b>{status}</b>\nКанал: <code>{CHANNEL_ID}</code>\n\nУправляйте кнопками:"
 
 # === /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -91,7 +91,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in AUTHORIZED_USERS and user_id not in ADMIN_CHAT_IDS:
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Ввести пароль", callback_data="auth_prompt")]])
         return await update.message.reply_text(
-            "<b>PhotoOnly Bot v5.0 UZ</b>\n\nДля доступа нужен пароль.\nНажмите кнопку ниже:",
+            "<b>PhotoOnly Bot v5.0 </b>\n\nДля доступа нужен пароль.\nНажмите кнопку ниже:",
             parse_mode="HTML", reply_markup=keyboard
         )
     await update.message.reply_text(get_main_text(), parse_mode="HTML", reply_markup=main_menu(user_id))
@@ -255,7 +255,7 @@ async def daily_report(app):
                 f"Пересылка: <b>{fwd}</b>\n"
                 f"Авторизовано: {len(AUTHORIZED_USERS)}\n"
                 f"Забанено: {len(BANNED_USERS)}\n\n"
-                f"Render Free UZ — 100% работает 24/7",
+                f"Render Free  — 100% работает 24/7",
                 parse_mode="HTML"
             )
         except Exception as e:
@@ -287,7 +287,7 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_t
 application.add_handler(MessageHandler(filters.ChatType.CHANNEL & filters.Chat(CHANNEL_ID), handle_channel_post))
 
 webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{BOT_TOKEN}"
-print(f"PhotoOnly Bot v5.0 UZBEKISTAN | 100% НЕ СПИТ | {datetime.now().strftime('%H:%M %d.%m.%Y')}")
+print(f"PhotoOnly Bot v5.0  | 100% НЕ СПИТ | {datetime.now().strftime('%H:%M %d.%m.%Y')}")
 print(f"Webhook: {webhook_url}")
 
 application.run_webhook(
